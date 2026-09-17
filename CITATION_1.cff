@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "4Cast Lab"
+abstract: "A single-file, browser-based interactive machine learning teaching and research workbench for building, validating, and comparing forecasting models."
+version: "3.0"
+date-released: 2026-09-17
+authors:
+  - family-names: Gogas
+    given-names: Periklis
+    affiliation: "Department of Economics, Democritus University of Thrace (DUTH)"
+    email: pgkogkas@econ.duth.gr
+repository-code: "https://github.com/PerryGogas/4Cast-Lab"
+url: "https://github.com/PerryGogas/4Cast-Lab"
+license: MIT
+keywords:
+  - machine learning
+  - forecasting
+  - econometrics
+  - teaching
+  - time series
