@@ -1,5 +1,7 @@
 **Train - Test - Forecast**
-Current version 4.0
+
+Current version
+
 **4Cast Lab** is an interactive, light, machine learning teaching laboratory and predictive workbench designed for students, researchers, and data science enthusiasts.
 Developed as a high-performance desktop utility, it provides a seamless, secure environment for exploring advanced forecasting algorithms, econometric models, and interactive data visualizations.
 
