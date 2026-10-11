@@ -1,9 +1,10 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
-title: "4Cast Lab"
-abstract: "A single-file, browser-based interactive machine learning teaching and research workbench for building, validating, and comparing forecasting models."
-version: "3.0"
-date-released: 2026-09-17
+title: "4Cast Lab: Open-source app for machine learning and statistical analyses"
+abstract: "A free, open-source application for machine learning, econometrics and statistical analysis that runs with no installation and no data leaving the user's computer. It implements eight families of learners, enforces leakage-safe validation for time-ordered data, compares every model against naive benchmarks with formal predictive-accuracy tests, and documents each run in a methods report."
+version: "4.6.2"
+date-released: 2026-10-10
+doi: 10.5281/zenodo.22818865
 authors:
   - family-names: Gogas
     given-names: Periklis
@@ -18,3 +19,15 @@ keywords:
   - econometrics
   - teaching
   - time series
+references:
+  - type: article
+    title: "4Cast Lab: Open-Source App for Machine Learning & Statistical Analysis"
+    authors:
+      - family-names: Gogas
+        given-names: Periklis
+        affiliation: "Department of Economics, Democritus University of Thrace (DUTH)"
+    year: 2026
+    month: 10
+    publisher:
+      name: SSRN
+    url: "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=7552460"
