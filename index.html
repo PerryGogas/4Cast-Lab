@@ -40298,6 +40298,36 @@ except Exception as ex: print("learning_curve:", ex)
   };
 })();
 
+
+/* =====================================================================
+   4Cast Lab v4.9.1: installable web app (PWA) when served over https (GitHub Pages).
+   The manifest and the service worker are attached only on a web server, so the
+   file opened from a folder and the Windows app are not affected.
+   ===================================================================== */
+(function () {
+  try {
+    const web = location.protocol === 'https:' || (location.hostname === 'localhost' && /pwatest/.test(location.search));
+    if (!web) return;
+    const add = (rel, href, extra) => { const l = document.createElement('link'); l.rel = rel; l.href = href; Object.assign(l, extra || {}); document.head.appendChild(l); };
+    add('manifest', 'manifest.webmanifest');
+    add('apple-touch-icon', 'icon-192.png');
+    const m = document.createElement('meta'); m.name = 'theme-color'; m.content = '#1b2540'; document.head.appendChild(m);
+    if ('serviceWorker' in navigator) window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(e => console.warn('4Cast Lab offline copy not available', e)); });
+    // a .4cl file double-clicked in Windows opens in the installed app
+    if ('launchQueue' in window) {
+      const go = () => launchQueue.setConsumer(async (p) => {
+        try {
+          if (!p || !p.files || !p.files.length) return;
+          const h = p.files[0], f = await h.getFile();
+          if (!/\.4cl$/i.test(f.name)) return;
+          v451OpenSessionBytes(await f.arrayBuffer(), f.name, { handle: h });
+        } catch (e) { console.error('open .4cl', e); }
+      });
+      if (document.readyState === 'complete') setTimeout(go, 1200); else window.addEventListener('load', () => setTimeout(go, 1200));
+    }
+  } catch (e) { console.warn('pwa', e); }
+})();
+
 </script>
 </body>
 </html>
