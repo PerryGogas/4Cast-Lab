@@ -2722,8 +2722,9 @@ body.dark .x54-learn-ic.qs { background: #475569; }
       <div class="card fc-only" id="thresholdCard">
         <h3>3. Probability Cutoff</h3>
         <div class="x47-explain" id="x47CutNote">AUC, log loss and Brier score do not depend on this cutoff; accuracy, sensitivity, specificity, F1, balanced accuracy and cost do.</div>
-        <label>Decision Threshold: <span id="thresholdVal" class="slider-val">0.50</span></label>
-        <input type="range" id="probThreshold" min="0.01" max="0.99" step="0.01" value="0.50" oninput="onThresholdInput()">
+        <label class="q50-thrrow">Decision Threshold: <span id="thresholdVal" class="slider-val" style="display:none;">0.50</span><input type="number" id="q50ThrBox" min="0" max="1" step="0.01" value="0.50" inputmode="decimal" aria-label="Decision threshold (0 to 1)" title="Type any value from 0 to 1 and press Enter. Up / Down arrows: steps of 0.01."></label>
+        <input type="range" id="probThreshold" min="0" max="1" step="any" value="0.50" oninput="q50ThrDrag()" onchange="q50ThrCommit()" aria-label="Decision threshold slider">
+        <div id="q50ThrNote" role="status"></div>
 
         <!-- v4.5: costs and a threshold rule. The rule picks the threshold from
              out-of-fold predictions inside the TRAINING partition, so the
@@ -7710,7 +7711,13 @@ function predictModel(modelType, X_train, y_train, X_test, params, isClassificat
    It is computed once per training run against the model's own
    `fittedModel.predict()` and shared by both the feature-ranking table's
    "SHAP Value" column and the SHAP summary chart. */
-function computeShapleyValues(fittedModel, X_data, numFeatures, randFunc, numSamples, numPermutations) {
+/* v5.0 (speed fixes): the long computations are generators that yield between
+   units of work. q50Drain runs one to the end at once, exactly as before; the
+   job runner (q50Run, in the x55 layer) runs it in slices so the window stays
+   responsive. Same code path either way, so the numbers are identical. */
+function q50Drain(g) { let r = g.next(); while (!r.done) r = g.next(); return r.value; }
+function computeShapleyValues() { return q50Drain(q50ShapG.apply(this, arguments)); }
+function* q50ShapG(fittedModel, X_data, numFeatures, randFunc, numSamples, numPermutations) {
   randFunc = randFunc || Math.random;
   numSamples = numSamples || Math.min(25, X_data.length);
   numPermutations = numPermutations || 25;
@@ -7719,7 +7726,7 @@ function computeShapleyValues(fittedModel, X_data, numFeatures, randFunc, numSam
   const sampleIdx = fisherYatesShuffle(Array.from({ length: X_data.length }, (_, i) => i), randFunc).slice(0, numSamples);
   const shapSums = new Array(numFeatures).fill(0);
 
-  sampleIdx.forEach(idx => {
+  for (const idx of sampleIdx) {
     const x = X_data[idx];
     const contrib = new Array(numFeatures).fill(0);
     for (let m = 0; m < numPermutations; m++) {
@@ -7733,17 +7740,21 @@ function computeShapleyValues(fittedModel, X_data, numFeatures, randFunc, numSam
         contrib[feat] += (newPred - prevPred);
         prevPred = newPred;
       }
+      if (numFeatures > 8) yield;
     }
     for (let j = 0; j < numFeatures; j++) shapSums[j] += Math.abs(contrib[j] / numPermutations);
-  });
+    yield;
+  }
 
   return shapSums.map(s => s / (sampleIdx.length || 1));
 }
 
-function calculateMultiCriterionRankings(X_train, y_train, X_val, y_val, featureNames, fittedModel, isClassification, randFunc, shapValues) {
+function calculateMultiCriterionRankings() { return q50Drain(q50RankG.apply(this, arguments)); }
+function* q50RankG(X_train, y_train, X_val, y_val, featureNames, fittedModel, isClassification, randFunc, shapValues) {
   const K = featureNames.length;
 
   const baselineOutputs = fittedModel.predict(X_val);
+  yield;
   let baselineScore = 0;
   if (isClassification) {
     const p = thresholdPredictions(baselineOutputs, 0.5);
@@ -7754,6 +7765,7 @@ function calculateMultiCriterionRankings(X_train, y_train, X_val, y_val, feature
 
   const mdiMap = new Array(K).fill(0);
   const treeModel = buildTreeReg(X_train, y_train, 0, 5);
+  yield;
   calculateTreeMDI(treeModel, K, mdiMap);
   const totalMdi = mdiMap.reduce((a, b) => a + b, 0) || 1;
 
@@ -7794,6 +7806,7 @@ function calculateMultiCriterionRankings(X_train, y_train, X_val, y_val, feature
       for (let i = 0; i < shuffledVal.length; i++) shuffledVal[i][j] = shuffledCol[i];
       const sc = scoreOf(fittedModel.predict(shuffledVal));
       drops.push(isClassification ? baselineScore - sc : sc - baselineScore);
+      yield;
     }
     const R = drops.length;
     const dMean = drops.reduce((a, b) => a + b, 0) / R;
@@ -7806,6 +7819,7 @@ function calculateMultiCriterionRankings(X_train, y_train, X_val, y_val, feature
 
     const mdiVal = (mdiMap[j] / totalMdi);
     const miVal = calculateMutualInformation(colTrain, y_train);
+    yield;
 
     rankingResults.push({
       feature: feat,
@@ -8136,7 +8150,7 @@ function runPipeline() {
             onError: (err) => { v41JobEnd(false); hideProgress(); console.error(err); showValidationBanner('Training failed: ' + (err && err.message ? err.message : err)); } });
         };
         const __afterGrid = () => {
-        v41JobFinalPhase();
+        // v5.0: no final phase any more: Stop works until the very end
 
         // One-standard-error rule (Hastie, Tibshirani & Friedman 2009, 7.10):
         // among configurations whose mean CV score is within one standard
@@ -8144,17 +8158,26 @@ function runPipeline() {
         // imposed, so the selected model is unchanged from previous versions.
         const oneSe = computeOneSeSuggestion(gridResults, bestScore, bestCv, modelType);
 
-        renderBestParams(bestParams, bestScore, isClassification, modelType, bestCv, gridResults, oneSe, cvScheme);
+        showProgress("Model Evaluation", "Fitting the selected model on the training set...", 85);
 
-        showProgress("Model Evaluation", "Calculating multi-criterion feature rankings...", 85);
-
-        setTimeout(() => {
-          let fitted = fitModel(modelType, X_train, y_train, bestParams, isClassification, randFunc);
-          const __v45 = v45PostFit(fitted, { modelType, params: bestParams, X: X_train_unscaled, y: y_train, kFolds, isClassification,
-            splitStrategy, embargoRows, cvScheme, scalingType, isDeterministic });
-          fitted = __v45.fitted;
-          const rawTrainOutputs = fitted.predict(X_train);
-          const rawValOutputs = fitted.predict(X_val);
+        setTimeout(async () => {
+          const __prev = q50Snapshot();
+          let fitted, __v45, rawTrainOutputs, rawValOutputs;
+          try {
+            fitted = await q50Run(q50FitTopG(modelType, X_train, y_train, bestParams, isClassification, randFunc));
+            await q50Pause();
+            showProgress("Model Evaluation", "Out-of-fold predictions for the threshold rules and calibration...", 86);
+            __v45 = await q50Run(q50PostFitG(fitted, { modelType, params: bestParams, X: X_train_unscaled, y: y_train, kFolds, isClassification,
+              splitStrategy, embargoRows, cvScheme, scalingType, isDeterministic }, true));
+            fitted = __v45.fitted;
+            rawTrainOutputs = fitted.predict(X_train);
+            await q50Pause();
+            rawValOutputs = fitted.predict(X_val);
+            await q50Pause();
+          } catch (err) {
+            if (q50IsStop(err)) { q50Restore(__prev); v41JobEnd(true); return; }
+            v41JobEnd(false); hideProgress(); console.error(err); showValidationBanner('Training failed: ' + (err && err.message ? err.message : err)); return;
+          }
 
           globalState = {
             isClassification, X_train, y_train, X_val, y_val, rawTrainOutputs, rawValOutputs, features, modelType, bestParams,
@@ -8192,34 +8215,36 @@ function runPipeline() {
 
           setupPDPSelect(features);
 
-          // v4.2: the evaluation phase runs in steps that yield to the browser,
-          // so the window repaints, the progress bar moves and Cancel works
-          // between steps (v4.1 ran it as one block: the window froze at 85%).
-          // Same computations, same order, same random stream.
-          let shapValues = null;
+          // v4.2: the evaluation phase runs in steps that yield to the browser.
+          // v5.0: each step is itself sliced (one prediction or one CV fold at a
+          // time) and everything is computed before anything is drawn. Same
+          // computations, same order, same random stream.
+          let shapValues = null, __rank = null, __beeDraw = null, __lcDraw = null;
           const __steps = [
-            ['Computing SHAP values...', 87, () => { shapValues = computeShapleyValues(fitted, X_val, features.length, randFunc); globalState.shapValues = shapValues; }],
-            ['Permutation importance (repeated shuffles per feature) and rankings...', 91, () => {
-              globalRankingData = calculateMultiCriterionRankings(X_train, y_train, X_val, y_val, features, fitted, isClassification, randFunc, shapValues);
-              renderFeatureRankingTable();
-              try { renderPermCiChart(); } catch (e) { console.error('perm CI chart', e); }
-              renderSHAPSummary(features, shapValues);
+            ['Computing SHAP values...', 87, function* () { shapValues = yield* q50ShapG(fitted, X_val, features.length, randFunc); globalState.shapValues = shapValues; }],
+            ['Permutation importance (repeated shuffles per feature) and rankings...', 91, function* () {
+              __rank = yield* q50RankG(X_train, y_train, X_val, y_val, features, fitted, isClassification, randFunc, shapValues);
             }],
-            ['Drawing the SHAP beeswarm...', 94, () => { renderBeeswarm(features, fitted, X_val, randFunc); }],
-            ['Computing the learning curve...', 97, () => { renderLearningCurve(X_train, y_train, X_val, y_val, modelType, isClassification, randFunc, bestParams, splitStrategy); }]
+            ['Computing the SHAP beeswarm...', 94, function* () { __beeDraw = yield* q50BeeG(features, fitted, X_val, randFunc); }],
+            ['Computing the learning curve...', 97, function* () { __lcDraw = yield* q50LcG(X_train, y_train, X_val, y_val, modelType, isClassification, randFunc, bestParams, splitStrategy); }]
           ];
-          let __si = 0;
-          const __evalStep = () => {
-            if (v41JobCancelled()) { v41JobEnd(true); return; }
-            if (__si < __steps.length) {
-              const st = __steps[__si++];
-              showProgress("Model Evaluation", st[0], st[1]);
-              setTimeout(() => {
-                try { st[2](); } catch (err) { v41JobEnd(false); hideProgress(); console.error(err); showValidationBanner('Evaluation failed: ' + (err && err.message ? err.message : err)); return; }
-                __evalStep();
-              }, 0);
-              return;
+          for (const st of __steps) {
+            showProgress("Model Evaluation", st[0], st[1]);
+            try { await q50Run(st[2]()); }
+            catch (err) {
+              if (q50IsStop(err)) { q50Restore(__prev); v41JobEnd(true); return; }
+              v41JobEnd(false); hideProgress(); console.error(err); showValidationBanner('Evaluation failed: ' + (err && err.message ? err.message : err)); return;
             }
+          }
+          {
+            // everything is computed: draw it (one short block)
+            renderBestParams(bestParams, bestScore, isClassification, modelType, bestCv, gridResults, oneSe, cvScheme);
+            globalRankingData = __rank;
+            renderFeatureRankingTable();
+            try { renderPermCiChart(); } catch (e) { console.error('perm CI chart', e); }
+            renderSHAPSummary(features, shapValues);
+            try { if (__beeDraw) __beeDraw(); } catch (e) { console.error('beeswarm', e); }
+            try { if (__lcDraw) __lcDraw(); } catch (e) { console.error('learning curve', e); }
             updateThreshold();
             try { renderLiveForecasts(); } catch (e) { console.error('live forecasts', e); }   // v4.3
 
@@ -8230,8 +8255,7 @@ function runPipeline() {
             hideProgress();
             v41JobEnd(false);
             v41OnRunComplete('single');
-          };
-          __evalStep();
+          }
         }, 50);
         };
         __gridStep();
@@ -8339,6 +8363,7 @@ function runTrainAll() {
     // default, so the leaderboard compares defaults rather than algorithms.
     const hpModeAll = getHpMode();              // v4.4 rebuild
     const tuneAll = hpModeAll !== 'default';
+    const __prevAll = q50Snapshot();             // v5.0: restored if Stop comes before the first model is finished
 
     globalState = {
       isClassification, X_train, y_train, X_val, y_val, features,
@@ -8389,19 +8414,29 @@ function runTrainAll() {
       v41JobStart('all');
       const __nestedAll = tuneAll && v45NestedOn();
       const __prAll = v45Progress(algorithms.reduce((a, al) => a + v45GridWork(al.id, getGridSpace(al.id, hpModeAll, al.kernel), __nestedAll, kFolds) + (V45_COST[al.id] || 1) * 0.3, 0));
+      // v5.0: Stop keeps the models already finished (none finished: nothing changes)
+      const __stopAll = () => {
+        if (!ensembleResultsData.length || (typeof X50 !== 'undefined' && X50.running)) { q50Restore(__prevAll); v41JobEnd(true); return; }
+        Q50.partial = { done: ensembleResultsData.length, total: algorithms.length };
+        if (V41.job) V41.job.cancelled = false;
+        __afterAll();
+      };
       const __algStep = () => {
-        if (v41JobCancelled()) { v41JobEnd(true); return; }
+        if (v41JobCancelled()) { __stopAll(); return; }
         if (__ai < algorithms.length) {
         const algIdx = __ai, alg = algorithms[__ai++];
-        const __fitAlg = (algParams, algCv, algNested) => {
+        const __fitAlg = async (algParams, algCv, algNested) => {
         try {
           showProgress("Ensemble Comparison", `Fitting ${alg.label} (${algIdx + 1} of ${algorithms.length})…`,
                        55 + Math.round(35 * (algIdx + 0.5) / algorithms.length));
-          let fitted = fitModel(alg.id, X_train, y_train, algParams, isClassification, randFunc);
-          const __v45 = v45PostFit(fitted, { modelType: alg.id, params: algParams, X: X_train_unscaled, y: y_train, kFolds, isClassification,
-            splitStrategy, embargoRows, cvScheme, scalingType, isDeterministic });
+          await q50Pause();
+          let fitted = await q50Run(q50FitTopG(alg.id, X_train, y_train, algParams, isClassification, randFunc));
+          await q50Pause();
+          const __v45 = await q50Run(q50PostFitG(fitted, { modelType: alg.id, params: algParams, X: X_train_unscaled, y: y_train, kFolds, isClassification,
+            splitStrategy, embargoRows, cvScheme, scalingType, isDeterministic }, true));
           fitted = __v45.fitted;
           const rawTrain = fitted.predict(X_train);
+          await q50Pause();
           const rawVal = fitted.predict(X_val);
 
           const common = { id: alg.id, key: alg.key || alg.id, kernel: alg.kernel || null, label: alg.label, isCurrent: (alg.key || alg.id) === globalState.modelType,
@@ -8425,6 +8460,7 @@ function runTrainAll() {
             ensembleResultsData.push(Object.assign({}, common, { train: mTrain, val: mVal }));
           }
         } catch (e) {
+          if (q50IsStop(e)) { __stopAll(); return; }
           console.error("Error evaluating " + alg.id, e);
         }
         setTimeout(__algStep, 0);
@@ -8435,6 +8471,7 @@ function runTrainAll() {
             scalingType, splitStrategy, embargoRows, cvScheme, nested: __nestedAll, progress: __prAll,
             onStatus: (lbl, frac, eta) => showProgress("Ensemble Comparison", `${tuneAll ? 'Tuning' : 'Cross-validating'} ${alg.label} (${algIdx + 1} of ${algorithms.length}): ${lbl}${eta}`, 55 + Math.round(35 * frac)),
             onDone: (res) => __fitAlg(res.bestParams, res.bestCv, res.nested),
+            onStop: () => __stopAll(),
             onError: (e) => { console.error("Error tuning " + alg.id, e); __fitAlg({}, null, null); } });
           return;
         }
@@ -8446,6 +8483,7 @@ function runTrainAll() {
       const __afterAll = () => {
       v41JobFinalPhase();
       renderEnsembleTuningBanner(tuneAll);
+      try { q50PartialNote(); } catch (e) {}
 
       setupEnsembleFocusSelect();   // picks the focus algorithm and points globalState at it
 
@@ -8464,6 +8502,7 @@ function runTrainAll() {
       v41JobEnd(false);
       v41OnRunComplete('compare');
       };
+      Q50.partial = null;
       x47ProbeThen(algorithms, hpModeAll, kFolds, X_train_unscaled, y_train, isClassification, scalingType, __prAll, __nestedAll, __algStep);
     }, 50);
   }, 50);
@@ -8504,7 +8543,7 @@ function flagBootstrapThresholdDrift() {
       tag.style.cssText = 'margin-top:6px; color:#b45309; font-weight:700;';
       box.appendChild(tag);
     }
-    tag.innerHTML = `These intervals were computed at threshold ${bootstrapRun.thresh.toFixed(2)}; the slider is now at ${now.toFixed(2)}. Re-run the bootstrap to match.`;
+    tag.innerHTML = `These intervals were computed at threshold ${q50FmtThr(bootstrapRun.thresh)}; the slider is now at ${q50FmtThr(now)}. Re-run the bootstrap to match.`;
   } else if (tag) {
     tag.remove();
   }
@@ -13690,7 +13729,7 @@ function renderOOSModelSummary() {
     <tr><td>Fitted on</td><td>${st.X_train ? st.X_train.length : 0} training rows (Test Set: ${st.X_val ? st.X_val.length : 0} rows)</td></tr>
     <tr><td>Preprocessing replayed on new data</td><td>${imp} → outlier handling: ${out} → scaling: ${scaling}<br><span style="font-size:11px; color:var(--muted);">All parameters estimated on the training set only and applied unchanged here.</span></td></tr>`;
   if (st.isClassification) {
-    html += `<tr><td>Decision threshold</td><td>${parseFloat(document.getElementById('probThreshold').value).toFixed(2)}</td></tr>`;
+    html += `<tr><td>Decision threshold</td><td>${q50FmtThr(parseFloat(document.getElementById('probThreshold').value))}</td></tr>`;
   }
   html += `</table>`;
   html += `<div style="font-size:11px; color:var(--muted); margin-top:8px;">Uploaded rows must carry the same predictor column names, spelled identically. Rows outside the training range are flagged, because no model extrapolates reliably and tree-based models cannot extrapolate at all.</div>`;
@@ -13801,7 +13840,7 @@ function renderOOSResults(rowsRaw, preds, featureRows) {
     html += row('Brier score', brierScore(yTrue, yHat), brierScore(st.y_val, st.rawValOutputs));
     html += row('Log loss', logLoss(yTrue, yHat), logLoss(st.y_val, st.rawValOutputs));
     html += `</table>`;
-    html += `<h4 style="margin-top:12px;">Confusion matrix on the uploaded data (threshold ${thr.toFixed(2)}, positive class = ${st.positiveLabel})</h4>
+    html += `<h4 style="margin-top:12px;">Confusion matrix on the uploaded data (threshold ${q50FmtThr(thr)}, positive class = ${st.positiveLabel})</h4>
              <div id="oosCm"></div>`;
     const drop = Math.abs(auc - vAuc);
     if (Number.isFinite(drop) && drop > 0.08) {
@@ -13886,7 +13925,7 @@ function renderOOSCharts(yTrue, yHat, keepIdx) {
       data: { datasets: [
         { label: `actual = ${st.positiveLabel} (positive)`, data: pos, backgroundColor: '#dc2626', pointStyle: 'triangle', pointRadius: 5 },
         { label: `actual = ${st.negativeLabel} (negative)`, data: neg, backgroundColor: '#2563eb', pointStyle: 'circle', pointRadius: 4 },
-        { label: `decision threshold (${thr.toFixed(2)})`, data: [{ x: 1, y: thr }, { x: yTrue.length, y: thr }],
+        { label: `decision threshold (${q50FmtThr(thr)})`, data: [{ x: 1, y: thr }, { x: yTrue.length, y: thr }],
           type: 'line', borderColor: '#64748b', borderDash: [5, 5], pointRadius: 0, fill: false }
       ] },
       options: { responsive: true, maintainAspectRatio: false,
@@ -14864,7 +14903,8 @@ function onIceFeatureChange() {
   renderICE();
 }
 
-function renderICE() {
+function renderICE() { return q50Drain(q50IceG()); }
+function* q50IceG() {
   const card = document.getElementById('iceCard');
   const cv = document.getElementById('iceChart');
   if (!card || !cv) return;
@@ -14874,9 +14914,6 @@ function renderICE() {
   if (!st || !st.fittedModel || !featName || !st.features) { card.style.display = 'none'; return; }
   const j = st.features.indexOf(featName);
   if (j === -1 || !st.X_train || st.X_train.length === 0) { card.style.display = 'none'; return; }
-  card.style.display = 'block';
-  destroyChart('ice');
-
   const col = st.X_train.map(r => r[j]);
   const lo = safeMin(col), hi = safeMax(col);
   const STEPS = 20;
@@ -14887,10 +14924,11 @@ function renderICE() {
   const rand = st.randFunc || Math.random;
   const idx = fisherYatesShuffle(Array.from({ length: st.X_train.length }, (_, i) => i), rand)
     .slice(0, Math.min(MAX_LINES, st.X_train.length));
+  yield;
 
   const datasets = [];
   const sums = new Array(grid.length).fill(0);
-  idx.forEach((i, k) => {
+  for (const i of idx) {
     const pts = grid.map(v => {
       const row = [...st.X_train[i]]; row[j] = v;
       return st.fittedModel.predict([row])[0];
@@ -14903,7 +14941,10 @@ function renderICE() {
       pointRadius: 0, pointHoverRadius: 4, pointHoverBackgroundColor: '#0284c7',
       fill: false, order: 2
     });
-  });
+    yield;
+  }
+  card.style.display = 'block';
+  destroyChart('ice');
   const avg = sums.map(s => s / idx.length);
   datasets.push({
     label: `PDP (average of ${idx.length} ICE curves)`,
@@ -14989,7 +15030,8 @@ function isoSegments_(Z, gx, gy, level) {
   return segs;
 }
 
-function renderPDP2D() {
+function renderPDP2D() { return q50Drain(q50Pdp2G()); }
+function* q50Pdp2G() {
   const out = document.getElementById('pdp2dOutput');
   const card = document.getElementById('pdp2dCard');
   const cv = document.getElementById('pdp2dChart');
@@ -15015,8 +15057,9 @@ function renderPDP2D() {
   const rand = st.randFunc || Math.random;
   const sub = fisherYatesShuffle(Array.from({ length: st.X_train.length }, (_, i) => i), rand)
     .slice(0, Math.min(60, st.X_train.length)).map(i => st.X_train[i]);
+  yield;
 
-  const surface = (n) => {
+  const surface = function* (n) {
     const gsx = Array.from({ length: n }, (_, i) => xLo + (i / (n - 1)) * ((xHi - xLo) || 1));
     const gsy = Array.from({ length: n }, (_, i) => yLo + (i / (n - 1)) * ((yHi - yLo) || 1));
     const Z = [];
@@ -15031,13 +15074,15 @@ function renderPDP2D() {
         if (Number.isFinite(m)) { if (m < zMin) zMin = m; if (m > zMax) zMax = m; }
       }
       Z.push(row);
+      yield;
     }
     return { Z, gsx, gsy, zMin, zMax,
              px: gsx.map(v => unscaleFeature(jx, v)), py: gsy.map(v => unscaleFeature(jy, v)) };
   };
 
   // ---------- contour / isoquant chart ----------
-  const S = surface(G);
+  const S = yield* surface(G);
+  const T = yield* surface(TG);     // v5.0: both surfaces are computed before anything is drawn
   const span = (S.zMax - S.zMin) || 1;
   const NLEV = 9;
   const levels = Array.from({ length: NLEV }, (_, i) => S.zMin + span * (i + 1) / (NLEV + 1));
@@ -15084,7 +15129,6 @@ function renderPDP2D() {
   }
 
   // ---------- numeric grid ----------
-  const T = surface(TG);
   const tSpan = (T.zMax - T.zMin) || 1;
   let html = `<div style="overflow-x:auto;"><table class="heatmap-table" style="font-size:10px;">`;
   html += `<tr><th class="hm-header-top hm-corner">${fy} ↓ / ${fx} →</th>`;
@@ -15109,12 +15153,11 @@ function renderPDP2D() {
 /* SHAP beeswarm: SIGNED per-observation contributions, coloured by the
    feature's own value. The mean-|SHAP| bar chart discards the direction,
    which is usually the part that carries the economic interpretation. */
-function renderBeeswarm(featureNames, fittedModel, X_data, randFunc) {
+function renderBeeswarm() { const draw = q50Drain(q50BeeG.apply(this, arguments)); if (typeof draw === 'function') draw(); }
+function* q50BeeG(featureNames, fittedModel, X_data, randFunc) {
   const card = document.getElementById('beeswarmCard');
   const cv = document.getElementById('beeswarmChart');
-  if (!card || !cv || !fittedModel || !X_data || X_data.length === 0) { if (card) card.style.display = 'none'; return; }
-  card.style.display = 'block';
-  destroyChart('beeswarm');
+  if (!card || !cv || !fittedModel || !X_data || X_data.length === 0) { if (card) card.style.display = 'none'; return null; }
 
   const K = featureNames.length;
   const rand = randFunc || Math.random;
@@ -15126,7 +15169,7 @@ function renderBeeswarm(featureNames, fittedModel, X_data, randFunc) {
   // per-observation SIGNED contributions (same estimator as computeShapleyValues,
   // but the sign is kept instead of taking the absolute value)
   const contribs = [];
-  sampleIdx.forEach(idx => {
+  for (const idx of sampleIdx) {
     const x = X_data[idx];
     const c = new Array(K).fill(0);
     for (let m = 0; m < nPerm; m++) {
@@ -15142,7 +15185,8 @@ function renderBeeswarm(featureNames, fittedModel, X_data, randFunc) {
       }
     }
     contribs.push({ idx, phi: c.map(v => v / nPerm), x });
-  });
+    yield;
+  }
 
   // order features by mean |phi|, most important at the top
   const meanAbs = Array.from({ length: K }, (_, j) => contribs.reduce((s, c) => s + Math.abs(c.phi[j]), 0) / contribs.length);
@@ -15165,6 +15209,9 @@ function renderBeeswarm(featureNames, fittedModel, X_data, randFunc) {
     });
   });
 
+  return () => {
+  card.style.display = 'block';
+  destroyChart('beeswarm');
   v31Charts.beeswarm = new Chart(cv.getContext('2d'), {
     type: 'scatter',
     data: { datasets },
@@ -15185,6 +15232,7 @@ function renderBeeswarm(featureNames, fittedModel, X_data, randFunc) {
       }
     }
   });
+  };
 }
 
 /* -------------------------------------------------------------------
@@ -15508,7 +15556,8 @@ function featureAxisLabel(featName) {
   return (!t || t === 'none') ? featName : `${featName}  (original units)`;
 }
 
-function renderPDP() {
+function renderPDP() { return q50Drain(q50PdpG()); }
+function* q50PdpG() {
   const featName = document.getElementById('pdpFeatureSelect').value;
   if (!featName || !globalState.features) return;
 
@@ -15516,7 +15565,6 @@ function renderPDP() {
   if (featIdx === -1 || !globalState.X_train || globalState.X_train.length === 0) return;
 
   const ctx = document.getElementById('pdpChart').getContext('2d');
-  if (pdpChartInstance) pdpChartInstance.destroy();
 
   const colVals = globalState.X_train.map(r => r[featIdx]);
   const min = safeMin(colVals);
@@ -15529,6 +15577,7 @@ function renderPDP() {
   const bgRows = globalState.X_train.length > 1000
     ? Array.from({ length: 1000 }, (_, i) => globalState.X_train[Math.floor(i * globalState.X_train.length / 1000)])
     : globalState.X_train;
+  yield;
   for (let step = 0; step <= 20; step++) {
     const val = min + (step / 20) * (max - min || 1);   // SCALED, for the model
 
@@ -15543,11 +15592,19 @@ function renderPDP() {
     // for Random Forest/ANN meant the PDP curve reflected 21 different
     // random models rather than the actual trained model's dependence on
     // this feature.
-    const outputs = globalState.fittedModel.predict(tempX);
+    // v5.0: predicted in blocks of 250 rows (each row is predicted on its own, so the values are the same)
+    const outputs = [];
+    for (let q = 0; q < tempX.length; q += 250) {
+      const part = globalState.fittedModel.predict(tempX.slice(q, q + 250));
+      for (let z = 0; z < part.length; z++) outputs.push(part[z]);
+      if (q + 250 < tempX.length) yield;
+    }
     // Plotted on the ORIGINAL scale: the model needs scaled inputs, the
     // reader needs square metres, not z-scores.
     points.push({ x: unscaleFeature(featIdx, val), y: safeMean(outputs) });
+    yield;
   }
+  if (pdpChartInstance) pdpChartInstance.destroy();
 
   const yLabel = globalState.isClassification
     ? 'Partial Dependence (mean predicted probability)'
@@ -20743,7 +20800,7 @@ function v41UpdateEmptyTabs() {
    number on screen is never mistaken for the result of the settings
    shown next to it.
    ===================================================================== */
-const V41_STALE_EXCLUDE = ['probThreshold', 'geminiApiKeyInput', 'aiModel', 'aiProvider', 'aiEndpoint', 'inferenceFileInput', 'fileInput',
+const V41_STALE_EXCLUDE = ['probThreshold', 'q50ThrBox', 'geminiApiKeyInput', 'aiModel', 'aiProvider', 'aiEndpoint', 'inferenceFileInput', 'fileInput',
   'loadSessionInput', 'v41FeatureSearch', 'datasetSelect', 'rtBelow', 'rtStars', 'rtDec', 'rtLabels', 'ensembleFocusSelect'];
 function v41SnapshotScope(mode) {
   const roots = ['leftPanel'];   // v4.9.1: the settings live in the six groups of the left panel since v4.7
@@ -21324,7 +21381,7 @@ function v41Overview(mode) {
   if (st.isClassification) {
     const thr = parseFloat((v41El('probThreshold') || {}).value || '0.5');
     const m = computeClassMetrics(calculateConfusionMatrix(st.y_val, thresholdPredictions(st.rawValOutputs, thr)));
-    perf = `ROC-AUC ${v41Fmt(calculateROCAUC(st.y_val, st.rawValOutputs), 3)}, PR-AUC ${v41Fmt(averagePrecision(st.y_val, st.rawValOutputs), 3)}, accuracy ${v41Fmt(m.acc, 3)} and F1 ${v41Fmt(m.f1, 3)} at a threshold of ${thr.toFixed(2)}`;
+    perf = `ROC-AUC ${v41Fmt(calculateROCAUC(st.y_val, st.rawValOutputs), 3)}, PR-AUC ${v41Fmt(averagePrecision(st.y_val, st.rawValOutputs), 3)}, accuracy ${v41Fmt(m.acc, 3)} and F1 ${v41Fmt(m.f1, 3)} at a threshold of ${q50FmtThr(thr)}`;
   } else {
     const m = computeRegMetrics(st.y_val, st.rawValOutputs);
     perf = `RMSE ${v41Fmt(m.rmse, 4)}, MAE ${v41Fmt(m.mae, 4)} and R² ${v41Fmt(m.r2, 4)}`;
@@ -23314,22 +23371,27 @@ function v45BeginRun() {
 function v45KeepSeed(fn) { const s = currentSeed; try { return fn(); } finally { currentSeed = s; } }
 
 /* ---------- out-of-fold predictions ---------- */
-function v45OOF(ctx) {
-  return v45KeepSeed(() => {
+function v45OOF(ctx) { return q50Drain(q50OOFBaseG(ctx)); }
+function* q50OOFBaseG(ctx) {
+  const outer = currentSeed;
+  try {
     const n = ctx.X.length;
     const folds = buildCvFolds(n, ctx.y, ctx.kFolds, ctx.isClassification, ctx.splitStrategy, ctx.embargoRows, ctx.cvScheme, getRandomFunc(ctx.isDeterministic));
     const idx = [], p = [], y = [];
-    folds.forEach(f => {
-      if (f.valIdx.length === 0 || f.trainIdx.length < 2) return;
+    for (const f of folds) {
+      if (f.valIdx.length === 0 || f.trainIdx.length < 2) continue;
       const Xtr = f.trainIdx.map(t => ctx.X[t]), ytr = f.trainIdx.map(t => ctx.y[t]);
-      if (ctx.isClassification && new Set(ytr).size < 2) return;
+      if (ctx.isClassification && new Set(ytr).size < 2) continue;
       const Xva = f.valIdx.map(t => ctx.X[t]);
       const sc = ctx.scalingType ? applyScaling(Xtr, Xva, ctx.scalingType) : { scaledTrain: Xtr, scaledVal: Xva };
-      const out = predictModel(ctx.modelType, sc.scaledTrain, ytr, sc.scaledVal, ctx.params, ctx.isClassification, getRandomFunc(ctx.isDeterministic));
+      const out = yield* q50Shield(q50PredictG(ctx.modelType, sc.scaledTrain, ytr, sc.scaledVal, ctx.params, ctx.isClassification, getRandomFunc(ctx.isDeterministic)), outer);
       out.forEach((v, i) => { if (Number.isFinite(v)) { idx.push(f.valIdx[i]); p.push(v); y.push(ctx.y[f.valIdx[i]]); } });
-    });
+      const inner = currentSeed; currentSeed = outer;      // a pause is invisible to the outside stream
+      yield;
+      currentSeed = inner;
+    }
     return { idx, p, y };
-  });
+  } finally { currentSeed = outer; }
 }
 
 /* ---------- calibration maps ---------- */
@@ -23417,11 +23479,12 @@ function v45ConformalQ(absRes, level) {
 }
 
 /* ---------- the post-fit step (called right after the final fit) ---------- */
-function v45PostFit(fitted, ctx) {
+function v45PostFit(fitted, ctx) { return q50Drain(q50PostFitG(fitted, ctx, false)); }
+function* q50PostFitG(fitted, ctx, sliced) {
   const run = V45.run || {};
   const info = { oof: null, calib: null, thr: null, pi: null, imb: run.imb || 'none' };
   let oof = null;
-  try { oof = v45OOF(ctx); } catch (e) { console.error('v45 OOF', e); }
+  try { oof = sliced ? yield* q50OOFG(ctx) : v45OOF(ctx); } catch (e) { if (q50IsStop(e)) throw e; console.error('v45 OOF', e); }
   if (oof && oof.p.length >= 10) info.oof = { n: oof.p.length, y: oof.y, idx: oof.idx, pRaw: oof.p.slice() };
   let out = fitted;
   if (ctx.isClassification && info.oof) {
@@ -23564,7 +23627,7 @@ function v45Costs() { const r = V45.run || {}; return { cFP: Number.isFinite(r.c
     const rule = st.v45 && st.v45.thr ? st.v45.thr.rule : 'manual';
     const body = tbl.tBodies[0] || tbl;
     body.insertAdjacentHTML('beforeend',
-      `<tr><td>Threshold used<span class="info-hint" title="Cases with a predicted probability at or above it are classed as positive. Chosen by the Threshold rule in group 6 (Decision).">?</span></td><td colspan="2">${thr.toFixed(2)} (${V45_RULE_LABELS[rule] || rule})</td></tr>` +
+      `<tr><td>Threshold used<span class="info-hint" title="Cases with a predicted probability at or above it are classed as positive. Chosen by the Threshold rule in group 6 (Decision).">?</span></td><td colspan="2">${q50FmtThr(thr)} (${V45_RULE_LABELS[rule] || rule})</td></tr>` +
       `<tr><td>Expected cost per case<span class="info-hint" title="(C_FP x false positives + C_FN x false negatives) / n, with the costs in group 6, Decision (now C_FP = ${c.cFP}, C_FN = ${c.cFN}). Lower is better.">?</span></td><td>${fmtMetric(a.perCase, 4)}</td><td>${fmtMetric(b.perCase, 4)}</td></tr>` +
       `<tr><td>Total cost (C_FP = ${c.cFP}, C_FN = ${c.cFN})</td><td>${fmtMetric(a.total, 2)}</td><td>${fmtMetric(b.total, 2)}</td></tr>`);
     if (st.v45 && st.v45.calib) {
@@ -23588,7 +23651,7 @@ function v45Costs() { const r = V45.run || {}; return { cFP: Number.isFinite(r.c
       const t = v45ThrFor(r, sl), rule = r.v45 && r.v45.thr ? r.v45.thr.rule : 'manual';
       const a = v45Cost(st.y_train, r.rawTrain, t, c.cFP, c.cFN), b = v45Cost(st.y_val, r.rawVal, t, c.cFP, c.cFN);
       const k = r.v45 && r.v45.calib;
-      h += `<tr><td><b>${v41Esc(r.label)}</b></td><td>${t.toFixed(2)}</td><td>${V45_RULE_LABELS[rule] || rule}</td><td>${fmtMetric(a.perCase, 4)}</td><td>${fmtMetric(b.perCase, 4)}</td><td>${fmtMetric(brierScore(st.y_val, r.rawVal), 4)}</td><td>${fmtMetric(r.val.prauc, 3)}</td>${ensembleResultsData.some(x => x.v45 && x.v45.calib) ? `<td>${k ? k.brierBefore.toFixed(4) + ' → ' + k.brierAfter.toFixed(4) : '—'}</td>` : ''}</tr>`;
+      h += `<tr><td><b>${v41Esc(r.label)}</b></td><td>${q50FmtThr(t)}</td><td>${V45_RULE_LABELS[rule] || rule}</td><td>${fmtMetric(a.perCase, 4)}</td><td>${fmtMetric(b.perCase, 4)}</td><td>${fmtMetric(brierScore(st.y_val, r.rawVal), 4)}</td><td>${fmtMetric(r.val.prauc, 3)}</td>${ensembleResultsData.some(x => x.v45 && x.v45.calib) ? `<td>${k ? k.brierBefore.toFixed(4) + ' → ' + k.brierAfter.toFixed(4) : '—'}</td>` : ''}</tr>`;
     });
     h += `</tbody></table></div><div style="font-size:11px; color:var(--muted);">Costs: C_FP = ${c.cFP}, C_FN = ${c.cFN} (group 6, Decision). The accuracy, sensitivity, specificity and F1 in Model Performance Metrics use each model's threshold shown here.</div>`;
     out.insertAdjacentHTML('beforeend', h);
@@ -23698,7 +23761,7 @@ function v45PredChart(containerId, y, out, isC) {
     ds.push({ label: 'Predicted probability', data: ord.map(i => out[i]), borderColor: '#0284c7', backgroundColor: '#0284c7', borderWidth: 1.5, pointRadius: 0, tension: 0 });
     ds.push({ label: 'Actual class (0/1)', data: ord.map(i => y[i]), type: 'scatter', showLine: false, borderColor: '#0f172a', backgroundColor: ord.map(i => y[i] === 1 ? '#b45309' : '#64748b'), pointRadius: 2.5 });
     const t = v45CurThreshold();
-    ds.push({ label: `Threshold ${t.toFixed(2)}`, data: ord.map(() => t), borderColor: '#64748b', borderDash: [4, 4], borderWidth: 1, pointRadius: 0 });
+    ds.push({ label: `Threshold ${q50FmtThr(t)}`, data: ord.map(() => t), borderColor: '#64748b', borderDash: [4, 4], borderWidth: 1, pointRadius: 0 });
   } else {
     ds.push({ label: 'Actual', data: ord.map(i => y[i]), borderColor: '#0f172a', backgroundColor: '#0f172a', borderWidth: timed ? 1.8 : 0, showLine: timed, pointRadius: timed ? (n > 200 ? 0 : 1.5) : 2, tension: 0 });
     ds.push({ label: 'Predicted', data: ord.map(i => out[i]), borderColor: '#0284c7', backgroundColor: '#0284c7', borderWidth: 1.8, pointRadius: n > 200 ? 0 : 1.5, tension: 0 });
@@ -24129,7 +24192,7 @@ function v45RenderRoc() {
   V45.roc.key = key;
   const hasOof = st.showingEnsemble ? (ensembleResultsData || []).some(r => r.v45 && r.v45.oof) : !!(st.v45 && st.v45.oof);
   out.innerHTML = `<div class="v45-roc-ctl no-print">
-      <div><label>Threshold: <b id="v45RocTval">${t.toFixed(2)}</b></label><input type="range" id="v45RocT" min="0.01" max="0.99" step="0.01" value="${t.toFixed(2)}" oninput="v45RocDrag(this.value)"></div>
+      <div><label>Threshold: <b id="v45RocTval">${q50FmtThr(t)}</b></label><input type="range" id="v45RocT" min="0.01" max="0.99" step="0.01" value="${q50FmtThr(t)}" oninput="v45RocDrag(this.value)"></div>
       <div><label>Curve of</label><select id="v45RocSample" onchange="V45.roc.key=null; v45RenderRoc()"><option value="val"${sample === 'val' ? ' selected' : ''}>Test Set rows</option>${hasOof ? `<option value="oof"${sample === 'oof' ? ' selected' : ''}>Training rows, out-of-fold</option>` : ''}</select></div>
     </div>
     <div class="v45-roc-grid">
@@ -24185,7 +24248,7 @@ function v45RocUpdate(t, fromDrag) {
   const c = v45Costs();
   const pt = v45RocPoint(focus.y, focus.p, t);
   const dot = ch.data.datasets.find(d => d._dot), iso = ch.data.datasets.find(d => d._iso), marks = ch.data.datasets.find(d => d._marks);
-  dot.data = [{ x: pt.x, y: pt.y, lbl: `Threshold ${t.toFixed(2)}: FPR ${pt.x.toFixed(3)}, TPR ${pt.y.toFixed(3)}` }];
+  dot.data = [{ x: pt.x, y: pt.y, lbl: `Threshold ${q50FmtThr(t)}: FPR ${pt.x.toFixed(3)}, TPR ${pt.y.toFixed(3)}` }];
   // minimum-cost point on this curve and the iso-cost line through it
   let best = null;
   const sc = v45ThresholdScan(focus.p, focus.y, c.cFP, c.cFN);
@@ -24216,7 +24279,7 @@ function v45RocUpdate(t, fromDrag) {
   const f1 = Number.isFinite(prec) && prec + sens > 0 ? 2 * prec * sens / (prec + sens) : NaN;
   const cost = c.cFP * pt.fp + c.cFN * pt.fn;
   const live = document.getElementById('v45RocLive');
-  if (live) live.innerHTML = `<div class="v45-roc-title">${v41Esc(focus.label)} at threshold <b>${t.toFixed(2)}</b> (${(document.getElementById('v45RocSample') || {}).value === 'oof' ? 'training, out-of-fold' : 'Test Set'} rows)</div>
+  if (live) live.innerHTML = `<div class="v45-roc-title">${v41Esc(focus.label)} at threshold <b>${q50FmtThr(t)}</b> (${(document.getElementById('v45RocSample') || {}).value === 'oof' ? 'training, out-of-fold' : 'Test Set'} rows)</div>
     <div class="cm-grid v45-cm"><div></div><div class="cm-header">Pred 0</div><div class="cm-header">Pred 1</div>
       <div class="cm-header">Actual 0</div><div class="cm-cell cm-cell-correct">${pt.tn}</div><div class="cm-cell cm-cell-error">${pt.fp}</div>
       <div class="cm-header">Actual 1</div><div class="cm-cell cm-cell-error">${pt.fn}</div><div class="cm-cell cm-cell-correct">${pt.tp}</div></div>
@@ -28506,7 +28569,13 @@ function v451PlattFit(f, y, w) {
 const v451Logit = p => { const q = Math.min(1 - 1e-12, Math.max(1e-12, p)); return Math.log(q / (1 - q)); };
 (function () {
   const prevFit = fitModel;
+  window.q50FitV45 = prevFit;
   fitModel = function (modelType, X_train, y_train, params, isClassification, randFunc) {
+    return q50Drain(q50FitV451G.call(this, modelType, X_train, y_train, params, isClassification, randFunc));
+  };
+})();
+function* q50FitV451G(modelType, X_train, y_train, params, isClassification, randFunc) {
+    const prevFit = window.q50FitV45;
     if (modelType !== 'svm' || !X_train || !X_train.length) return prevFit.apply(this, arguments);
     if (!isClassification) {
       const n = y_train.length;
@@ -28518,6 +28587,7 @@ const v451Logit = p => { const q = Math.min(1 - 1e-12, Math.max(1e-12, p)); retu
     }
     // classification: the fitted model returns logistic(decision); Platt maps decision values to probabilities
     const full = prevFit.apply(this, arguments);
+    yield;
     const n = X_train.length;
     let fDec = null, yCal = null;
     try {
@@ -28531,6 +28601,7 @@ const v451Logit = p => { const q = Math.min(1 - 1e-12, Math.max(1e-12, p)); retu
           const m = prevFit.call(this, modelType, tr.map(i => X_train[i]), ytr, params, true, randFunc);
           const pv = m.predict(va.map(i => X_train[i]));
           va.forEach((i, j) => { fDec[i] = v451Logit(pv[j]); });
+          yield;
         }
       }
       if (!fDec) { fDec = full.predict(X_train).map(v451Logit); yCal = y_train.slice(); }
@@ -28543,8 +28614,7 @@ const v451Logit = p => { const q = Math.min(1 - 1e-12, Math.max(1e-12, p)); retu
     const pl = v451PlattFit(fDec, yCal, w);
     const map = p => 1 / (1 + Math.exp(pl.A * v451Logit(p) + pl.B));   // Platt: P(y=1 | f) = 1 / (1 + exp(A f + B))
     return Object.assign({}, full, { predict: Xt => full.predict(Xt).map(map), v451: { plattA: pl.A, plattB: pl.B } });
-  };
-})();
+}
 
 /* ---------- dates: 2026-10-03 14:05:09, not the browser's US format ---------- */
 (function () {
@@ -29961,10 +30031,10 @@ v45RunVarSel = function () {
   const doPath = (alpha, key) => {
     const st = { lmax: null, loss: FR.map(() => []) };
     tasks.push({ w: 1, run: () => { const Xc = sub(X, cols0); st.lmax = (isC ? v45ElasticNetLogistic(Xc, y, alpha, 1, null) : v45ElasticNetLinear(Xc, y, alpha, 1, null)).lambdaMax; }, label: () => `${key === 'lasso' ? 'LASSO' : 'Elastic net'}: penalty path` });
-    folds.forEach((f, fi) => tasks.push({ w: 3, run: () => {
+    folds.forEach((f, fi) => tasks.push({ w: 3, run: function* () {
       const cs = foldCols[fi];
       const Xt = f.trainIdx.map(t => cs.map(j => X[t][j])), yt = f.trainIdx.map(t => y[t]), Xv = f.valIdx.map(t => cs.map(j => X[t][j])), yv = f.valIdx.map(t => y[t]);
-      FR.forEach((fr, li) => { const m = v45EnFit(Xt, yt, alpha, fr * st.lmax, isC); st.loss[li].push(v45Loss(yv, v45EnPredict(m, Xv, isC), isC)); });
+      for (let li = 0; li < FR.length; li++) { const fr = FR[li]; const m = v45EnFit(Xt, yt, alpha, fr * st.lmax, isC); st.loss[li].push(v45Loss(yv, v45EnPredict(m, Xv, isC), isC)); yield; }
     }, label: () => `${key === 'lasso' ? 'LASSO' : 'Elastic net'}: cross-validation fold ${fi + 1} of ${folds.length}` }));
     tasks.push({ w: 1, run: () => {
       const ms = st.loss.map(v45MeanSE);
@@ -30002,11 +30072,12 @@ v45RunVarSel = function () {
   if (methods.includes('rfecv')) {
     const P = cols0.length;
     const lossBySize = Array.from({ length: P }, () => []);
-    folds.forEach((f, fi) => tasks.push({ w: p, run: () => {
+    folds.forEach((f, fi) => tasks.push({ w: p, run: function* () {
       const cs = foldCols[fi];
       const Xt = f.trainIdx.map(t => cs.map(j => X[t][j])), yt = f.trainIdx.map(t => y[t]), Xv = f.valIdx.map(t => cs.map(j => X[t][j])), yv = f.valIdx.map(t => y[t]);
       const ord = rfeRank(Xt, yt);
-      for (let m = 1; m <= Math.min(P, cs.length); m++) { const cc = ord.slice(0, m); const fit = v45FitLin(Xt.map(r => cc.map(j => r[j])), yt, isC); lossBySize[m - 1].push(v45Loss(yv, fit.predict(Xv.map(r => cc.map(j => r[j]))), isC)); }
+      yield;
+      for (let m = 1; m <= Math.min(P, cs.length); m++) { const cc = ord.slice(0, m); const fit = v45FitLin(Xt.map(r => cc.map(j => r[j])), yt, isC); lossBySize[m - 1].push(v45Loss(yv, fit.predict(Xv.map(r => cc.map(j => r[j]))), isC)); yield; }
     }, label: () => `RFECV: fold ${fi + 1} of ${folds.length}` }));
     tasks.push({ w: 0.1, run: () => {
       const ms = lossBySize.map(v45MeanSE);
@@ -30017,7 +30088,7 @@ v45RunVarSel = function () {
   }
   if (methods.includes('stab')) {
     const B = 100, freq = new Array(p).fill(0), rnd = v45Rng(2026);
-    for (let b = 0; b < B; b += 10) tasks.push({ w: 3, run: () => {
+    for (let b = 0; b < B; b += 10) tasks.push({ w: 3, run: function* () {
       for (let q = b; q < Math.min(B, b + 10); q++) {
         const idx = fisherYatesShuffle(Array.from({ length: n }, (_, i) => i), rnd).slice(0, Math.floor(n / 2));
         const ys = idx.map(i => y[i]);
@@ -30025,6 +30096,7 @@ v45RunVarSel = function () {
         const cs = v452ScreenCols(X, y, idx, SCR);
         const m = v45EnFit(idx.map(i => cs.map(j => X[i][j])), ys, 1, R.lasso.lam, isC);
         m.w.forEach((w, q2) => { if (w !== 0) freq[cs[q2]]++; });
+        yield;
       }
     }, label: () => `Stability selection: half-samples ${b + 1} to ${Math.min(B, b + 10)} of ${B}` });
     tasks.push({ w: 0.1, run: () => { R.stab = { freq: freq.map(f => f / B), B, thr: 0.6 }; } });
@@ -30033,14 +30105,15 @@ v45RunVarSel = function () {
     const REP = 10, rnd = v45Rng(4521);
     const perFold = folds.map(() => new Array(p).fill(NaN));
     const cost = impModel === 'rf' ? 4 : (impModel === 'svm' || impModel === 'ann' ? 6 : 2);
-    folds.forEach((f, fi) => tasks.push({ w: cost * 2, run: () => {
+    folds.forEach((f, fi) => tasks.push({ w: cost * 2, run: function* () {
       const cs = foldCols[fi];
       const Xt = f.trainIdx.map(t => cs.map(j => X[t][j])), yt = f.trainIdx.map(t => y[t]);
       const Xv = f.valIdx.map(t => cs.map(j => X[t][j])), yv = f.valIdx.map(t => y[t]);
       if (isC && new Set(yt).size < 2) return;
       const m = v452ImpFit(impModel, Xt, yt, isC, v45Rng(77 + fi), trees);
       const base = v452ImpLoss(yv, m.predict(Xv), isC);
-      cs.forEach((j, q) => {
+      yield;
+      for (let q = 0; q < cs.length; q++) { const j = cs[q];
         let s = 0, c = 0;
         for (let r = 0; r < REP; r++) {
           const perm = fisherYatesShuffle(Xv.map((_, i) => i), rnd);
@@ -30049,7 +30122,8 @@ v45RunVarSel = function () {
           if (Number.isFinite(l)) { s += l - base; c++; }
         }
         perFold[fi][j] = c ? (isC ? 100 * s / c : (base > 0 ? 100 * (s / c) / base : NaN)) : NaN;
-      });
+        yield;
+      }
     }, label: () => `CV permutation importance: fold ${fi + 1} of ${folds.length}` }));
     tasks.push({ w: 0.1, run: () => {
       const mean = [], lo = [], hi = [];
@@ -30101,7 +30175,7 @@ v45RunVarSel = function () {
       if (!st.status.some(s => s === 'T')) st.done = true;
     };
     const per = impModel === 'rf' ? 2 : 1;
-    for (let b = 0; b < maxRuns; b += per) tasks.push({ w: impModel === 'rf' ? 2.5 : 4, run: () => { for (let q = 0; q < per; q++) oneRun(); }, label: () => `Boruta: run ${Math.min(maxRuns, st.it + 1)} of at most ${maxRuns}${st.done ? ' (all decided)' : ''}` });
+    for (let b = 0; b < maxRuns; b += per) tasks.push({ w: impModel === 'rf' ? 2.5 : 4, run: function* () { for (let q = 0; q < per; q++) { oneRun(); yield; } }, label: () => `Boruta: run ${Math.min(maxRuns, st.it + 1)} of at most ${maxRuns}${st.done ? ' (all decided)' : ''}` });
     tasks.push({ w: 0.1, run: () => { R.boruta = { status: st.status.slice(), hits: st.hits.slice(), runs: st.runs.slice(), iters: st.it, maxRuns, model: impModel, alpha: 0.01, sel: st.status.map(s => s === 'C') }; } });
   }
   if (methods.includes('filter')) tasks.push({ w: 1, run: () => {
@@ -30759,14 +30833,16 @@ v45TuneGrid = function (o) {
       if (f.valIdx.length === 0 || f.trainIdx.length < Math.max(8, 2 * o.kFolds)) { nest.folds.push({ skipped: true }); return; }
       const Xi = f.trainIdx.map(t => o.X[t]), yi = f.trainIdx.map(t => o.y[t]);
       const st = { best: -Infinity, params: grid[0] };
-      grid.forEach((params, gi) => tasks.push({ w: cost * (f.trainIdx.length / o.X.length), run: () => {
-        const cv = executeCrossValidation(Xi, yi, o.kFolds, o.modelType, params, o.isClassification, getRandomFunc(o.isDeterministic), o.scalingType, o.splitStrategy, o.embargoRows, o.cvScheme, opts);
+      grid.forEach((params, gi) => tasks.push({ w: cost * (f.trainIdx.length / o.X.length), run: function* () {
+        const S2 = x47CvBegin(Xi, yi, o.kFolds, o.modelType, params, o.isClassification, getRandomFunc(o.isDeterministic), o.scalingType, o.splitStrategy, o.embargoRows, o.cvScheme, opts);
+        while (S2.i < S2.folds.length) yield* q50CvFoldG(S2);
+        const cv = x47CvFinish(S2);
         if (cv.score > st.best) { st.best = cv.score; st.params = params; }
       }, label: () => `nested CV: outer fold ${fi + 1} of ${folds.length}, setting ${gi + 1} of ${grid.length}` }));
-      tasks.push({ w: cost / o.kFolds, run: () => {
+      tasks.push({ w: cost / o.kFolds, run: function* () {
         const Xo = f.valIdx.map(t => o.X[t]), yo = f.valIdx.map(t => o.y[t]);
         const sc = o.scalingType ? applyScaling(Xi, Xo, o.scalingType) : { scaledTrain: Xi, scaledVal: Xo };
-        const out = predictModel(o.modelType, sc.scaledTrain, yi, sc.scaledVal, st.params, o.isClassification, getRandomFunc(o.isDeterministic));
+        const out = yield* q50PredictG(o.modelType, sc.scaledTrain, yi, sc.scaledVal, st.params, o.isClassification, getRandomFunc(o.isDeterministic));
         const score = v46FoldScore(yo, out, o.isClassification, metric, thr).s;
         nest.folds.push({ params: st.params, innerScore: st.best, outerScore: score, nTrain: Xi.length, nVal: Xo.length });
       }, label: () => `nested CV: scoring outer fold ${fi + 1} of ${folds.length}` });
@@ -31700,7 +31776,7 @@ v45RenderRoc = function () {
   const block = (part, noTitle) => `<div class="v46-rocblock" data-part="${part}">${noTitle ? '' : `<div class="v46-roctitle">${V46_ROC_PARTS[part].title} ${v46Q(V46_ROC_PARTS[part].help)}</div>`}
       <div class="v45-roc-grid"><div class="chart-container-box v45-tall" style="height:${st.showingEnsemble ? 400 : 360}px;"><canvas id="${V46_ROC_PARTS[part].canvas}"></canvas></div><div id="${V46_ROC_PARTS[part].live}"></div></div></div>`;
   out.innerHTML = `<div class="v45-roc-ctl v46-rocctl no-print">
-      <div><label>Threshold: <b id="v45RocTval">${t.toFixed(2)}</b></label><input type="range" id="v45RocT" min="0.01" max="0.99" step="0.01" value="${t.toFixed(2)}" oninput="v45RocDrag(this.value)"></div>
+      <div><label>Threshold: <b id="v45RocTval">${q50FmtThr(t)}</b></label><input type="range" id="v45RocT" min="0.01" max="0.99" step="0.01" value="${q50FmtThr(t)}" oninput="v45RocDrag(this.value)"></div>
       <div class="v46-costbox"><label>Cost of a false positive (C_FP)</label><input type="number" id="v46CostFP" min="0" step="any" value="${c.cFP}" onchange="v46RocCost()"></div>
       <div class="v46-costbox"><label>Cost of a false negative (C_FN)</label><input type="number" id="v46CostFN" min="0" step="any" value="${c.cFN}" onchange="v46RocCost()"></div>
       ${models.length > 1 ? `<div><label>Confusion matrix and metrics of</label><select id="v46RocFocus" onchange="V46.roc.focusKey = this.value; V46.roc.key = null; v45RenderRoc()">${models.map(m => `<option value="${v41Esc(m.key)}"${m.key === focus.key ? ' selected' : ''}>${v41Esc(m.label)}${m.selected ? ' (selected by CV)' : ''}</option>`).join('')}</select></div>` : ''}
@@ -31771,7 +31847,7 @@ function v46RocUpdatePart(part, focus, t, c) {
   if (!ch || !d || !d.p) { if (live) live.innerHTML = ''; return null; }
   const pt = v45RocPoint(d.y, d.p, t);
   const dot = ch.data.datasets.find(x => x._dot), iso = ch.data.datasets.find(x => x._iso), marks = ch.data.datasets.find(x => x._marks);
-  dot.data = [{ x: pt.x, y: pt.y, lbl: `${focus.label}, threshold ${t.toFixed(2)}: FPR ${pt.x.toFixed(3)}, TPR ${pt.y.toFixed(3)}` }];
+  dot.data = [{ x: pt.x, y: pt.y, lbl: `${focus.label}, threshold ${q50FmtThr(t)}: FPR ${pt.x.toFixed(3)}, TPR ${pt.y.toFixed(3)}` }];
   let best = null;
   const sc = v45ThresholdScan(d.p, d.y, c.cFP, c.cFN);
   if (sc) { const tt = sc.best.cost.t; const q = v45RocPoint(d.y, d.p, tt); best = { k: c.cFP * q.fp + c.cFN * q.fn, q, tt }; }
@@ -31794,7 +31870,7 @@ function v46RocUpdatePart(part, focus, t, c) {
   const sens = P ? pt.tp / P : NaN, spec = N ? pt.tn / N : NaN, prec = pt.tp + pt.fp ? pt.tp / (pt.tp + pt.fp) : NaN;
   const f1 = Number.isFinite(prec) && prec + sens > 0 ? 2 * prec * sens / (prec + sens) : NaN;
   const cost = c.cFP * pt.fp + c.cFN * pt.fn, auc = calculateROCAUC(d.y, d.p);
-  if (live) live.innerHTML = `<div class="v45-roc-title">${v41Esc(focus.label)} at threshold <b>${t.toFixed(2)}</b> (${V46_ROC_PARTS[part].rows}, ${n} rows)</div>
+  if (live) live.innerHTML = `<div class="v45-roc-title">${v41Esc(focus.label)} at threshold <b>${q50FmtThr(t)}</b> (${V46_ROC_PARTS[part].rows}, ${n} rows)</div>
     <div class="cm-grid v45-cm"><div></div><div class="cm-header">Pred 0</div><div class="cm-header">Pred 1</div>
       <div class="cm-header">Actual 0</div><div class="cm-cell cm-cell-correct">${pt.tn}</div><div class="cm-cell cm-cell-error">${pt.fp}</div>
       <div class="cm-header">Actual 1</div><div class="cm-cell cm-cell-error">${pt.fn}</div><div class="cm-cell cm-cell-correct">${pt.tp}</div></div>
@@ -32149,7 +32225,7 @@ v45RenderRoc = function () {
         <div id="${V46_ROC_PARTS[part].live}Cm" class="v462-cmslot"></div></div>
         <div id="${V46_ROC_PARTS[part].live}" class="v462-rocright"></div></div></div>`;
   out.innerHTML = `<div class="v45-roc-ctl v46-rocctl no-print">
-      <div><label>Threshold: <b id="v45RocTval">${t.toFixed(2)}</b></label><input type="range" id="v45RocT" min="0.01" max="0.99" step="0.01" value="${t.toFixed(2)}" oninput="v45RocDrag(this.value)"></div>
+      <div><label>Threshold: <b id="v45RocTval">${q50FmtThr(t)}</b></label><input type="range" id="v45RocT" min="0.01" max="0.99" step="0.01" value="${q50FmtThr(t)}" oninput="v45RocDrag(this.value)"></div>
       <div class="v46-costbox"><label>Cost of a false positive (C_FP)</label><input type="number" id="v46CostFP" min="0" step="any" value="${c.cFP}" onchange="v46RocCost()"></div>
       <div class="v46-costbox"><label>Cost of a false negative (C_FN)</label><input type="number" id="v46CostFN" min="0" step="any" value="${c.cFN}" onchange="v46RocCost()"></div>
       ${models.length > 1 ? `<div><label>Confusion matrix and metrics of</label><select id="v46RocFocus" onchange="V462.rocPick = this.value; V46.roc.key = null; v45RenderRoc()">${models.map(m => `<option value="${v41Esc(m.key)}"${m.key === focus.key ? ' selected' : ''}>${v41Esc(m.label)}${m.selected ? ' (selected by CV)' : ''}</option>`).join('')}</select></div>` : ''}
@@ -32270,7 +32346,7 @@ v46RocUpdatePart = function (part, focus, t, c) {
   const sens = P0 ? pt.tp / P0 : NaN, spec = N0 ? pt.tn / N0 : NaN, prec = pt.tp + pt.fp ? pt.tp / (pt.tp + pt.fp) : NaN;
   const f1 = Number.isFinite(prec) && prec + sens > 0 ? 2 * prec * sens / (prec + sens) : NaN;
   const cost = c.cFP * pt.fp + c.cFN * pt.fn, auc = calculateROCAUC(d.y, d.p), ap = averagePrecision(d.y, d.p);
-  if (live) live.innerHTML = `<div class="v45-roc-title">${v41Esc(focus.label)} at threshold <b>${t.toFixed(2)}</b><br><span class="v462-sub">${V46_ROC_PARTS[part].rows}, ${n} rows</span></div>
+  if (live) live.innerHTML = `<div class="v45-roc-title">${v41Esc(focus.label)} at threshold <b>${q50FmtThr(t)}</b><br><span class="v462-sub">${V46_ROC_PARTS[part].rows}, ${n} rows</span></div>
     <table class="metrics-table v41-nosort v462-rocmet"><tbody>
       <tr><td>AUC (ROC)</td><td>${fmtMetric(auc, 3)}</td></tr>
       <tr><td>PR-AUC (average precision)</td><td>${fmtMetric(ap, 3)}</td></tr>
@@ -34112,14 +34188,15 @@ function x47CvBegin(X, y, k, modelType, params, isClassification, randFunc, scal
   const folds = buildCvFolds(X.length, y, k, isClassification, splitStrategy, embargo, scheme, randFunc);
   return { X, y, modelType, params, isClassification, randFunc, scalingType, scheme, opts, folds, i: 0, keep: [], nSkipped: 0 };
 }
-function x47CvFold(S) {
+function x47CvFold(S) { return q50Drain(q50CvFoldBaseG(S)); }
+function* q50CvFoldBaseG(S) {
   const f = S.folds[S.i++]; if (!f) return;
   const X = S.X, y = S.y;
   if (f.valIdx.length === 0 || f.trainIdx.length < 2) { S.nSkipped++; return; }
   const Xtr = f.trainIdx.map(t => X[t]), ytr = f.trainIdx.map(t => y[t]);
   const Xva = f.valIdx.map(t => X[t]), yva = f.valIdx.map(t => y[t]);
   const sc = S.scalingType ? applyScaling(Xtr, Xva, S.scalingType) : { scaledTrain: Xtr, scaledVal: Xva };
-  const out = predictModel(S.modelType, sc.scaledTrain, ytr, sc.scaledVal, S.params, S.isClassification, S.randFunc);
+  const out = yield* q50PredictG(S.modelType, sc.scaledTrain, ytr, sc.scaledVal, S.params, S.isClassification, S.randFunc);
   const one = S.isClassification && new Set(ytr).size < 2;
   S.keep.push({ idx: f.valIdx.slice(), y: yva, p: Array.from(out), nTrain: Xtr.length, oneClassTrain: one ? String(ytr[0]) : null });
 }
@@ -34786,7 +34863,7 @@ v41CopyFallback = function (text, done) {
   const note = () => {
     const L = document.getElementById('leftPanel'); if (!L) return null;
     let n = document.getElementById('x47LockNote');
-    if (!n) { n = document.createElement('div'); n.id = 'x47LockNote'; n.className = 'x47-locknote'; n.innerHTML = 'Locked while the run is in progress; press <b>Cancel</b> on the progress box to change settings.'; L.insertBefore(n, L.firstChild); }
+    if (!n) { n = document.createElement('div'); n.id = 'x47LockNote'; n.className = 'x47-locknote'; n.innerHTML = 'Locked while the run is in progress; press <b>Stop</b> (or Esc) to change settings.'; L.insertBefore(n, L.firstChild); }
     return n;
   };
   x47Wrap('v41JobStart', () => { const n = note(); if (n) n.style.display = ''; });
@@ -35133,7 +35210,7 @@ function x47Sum(g) {
     if (!isC) { const pi = parseFloat(v('piLevel')); return [pi > 0 ? `Intervals ${Math.round(pi * 100)}%` : 'Intervals off', 'conformal']; }
     const r = v('thrRule') || 'manual';
     const short = { manual: 'Manual', half: '0.5', youden: 'Balanced accuracy', f1: 'Max F1', fbeta: `Max F-beta (β ${X47.beta})`, mcc: 'Max MCC', prev: 'Prevalence', tsens: `Sensitivity ≥ ${X47.tsens}`, cost: 'Min cost' }[r] || r;
-    return [`${short} · ${parseFloat(v('probThreshold') || 0.5).toFixed(2)}`, `costs ${v('costFP') || 1} : ${v('costFN') || 1}`];
+    return [`${short} · ${q50FmtThr(parseFloat(v('probThreshold') || 0.5))}`, `costs ${v('costFP') || 1} : ${v('costFN') || 1}`];
   }
   return ['', ''];
 }
@@ -35569,16 +35646,31 @@ const X47_YIELD = (() => {
 v45RunTasks = function (tasks, o, done) {
   const pr = o.progress || (o.progress = v45Progress(tasks.reduce((a, t) => a + t.w, 0)));
   if (!Number.isFinite(pr.tt)) pr.tt = 0;
-  let i = 0;
+  let i = 0, it = null, itT = null, act = 0;
   const step = () => {
-    if (v41JobCancelled()) { v41JobEnd(true); if (o.onCancel) o.onCancel(); return; }
+    if (v41JobCancelled()) { if (it) { try { it.return(); } catch (e) {} it = null; } if (o.onStop) { o.onStop(); return; } v41JobEnd(true); if (o.onCancel) o.onCancel(); return; }
     const t0 = performance.now();
     try {
-      while (i < tasks.length) {
-        const t = tasks[i++];
-        const a = performance.now();
-        t.run(); pr.doneW += t.w;
-        const d = performance.now() - a; pr.tt += d;
+      while (it || i < tasks.length) {
+        let t, d;
+        if (!it) {
+          t = tasks[i++]; act = 0;
+          const a0 = performance.now();
+          const ret = t.run();
+          act += performance.now() - a0;
+          if (ret && typeof ret.next === 'function') { it = ret; itT = t; }
+        }
+        if (it) {
+          t = itT;
+          const a1 = performance.now();
+          let r = it.next();
+          while (!r.done && performance.now() - t0 <= X47.slice) r = it.next();
+          act += performance.now() - a1;
+          if (!r.done) break;
+          it = null; itT = null;
+        }
+        pr.doneW += t.w;
+        d = act; pr.tt += d;
         if (t.k) {
           if (!pr.cur || pr.cur.k !== t.k || pr.cur.id !== t.id) pr.cur = { k: t.k, id: t.id, w: 0, t: 0, totalW: t.kw || 0, sw: 0, st: 0, ema: NaN };
           const c = pr.cur;
@@ -35591,9 +35683,10 @@ v45RunTasks = function (tasks, o, done) {
         }
         if (performance.now() - t0 > X47.slice) break;
       }
-    } catch (err) { if (o.onError) o.onError(err); else throw err; return; }
-    if (i < tasks.length) {
-      if (o.onStatus) o.onStatus(tasks[i].label ? tasks[i].label() : '', Math.min(1, pr.doneW / pr.totalW), x47Eta(pr));
+    } catch (err) { it = null; if (o.onError) o.onError(err); else throw err; return; }
+    if (it || i < tasks.length) {
+      const nt = it ? itT : tasks[i];
+      if (o.onStatus) o.onStatus(nt && nt.label ? nt.label() : '', Math.min(1, pr.doneW / pr.totalW), x47Eta(pr));
       X47_YIELD(step);
       return;
     }
@@ -35701,7 +35794,7 @@ v45TuneGrid = function (o) {
     tasks.push({ w: 0, k: key, id, kw, label, run: () => {
       S = x47CvBegin(o.X, o.y, o.kFolds, o.modelType, params, o.isClassification, getRandomFunc(o.isDeterministic), o.scalingType, o.splitStrategy, o.embargoRows, o.cvScheme, opts);
     } });
-    for (let f = 0; f < o.kFolds; f++) tasks.push({ w: cg / o.kFolds, k: key, id, kw, label, run: () => { if (S && S.i < S.folds.length) x47CvFold(S); } });
+    for (let f = 0; f < o.kFolds; f++) tasks.push({ w: cg / o.kFolds, k: key, id, kw, label, run: () => (S && S.i < S.folds.length) ? q50CvFoldG(S) : undefined });
     tasks.push({ w: 0, k: key, id, kw, label, end: true, run: () => {
       while (S.i < S.folds.length) x47CvFold(S);
       const cv = x47CvFinish(S); S = null;
@@ -35716,14 +35809,16 @@ v45TuneGrid = function (o) {
       if (f.valIdx.length === 0 || f.trainIdx.length < Math.max(8, 2 * o.kFolds)) { nest.folds.push({ skipped: true }); return; }
       const Xi = f.trainIdx.map(t => o.X[t]), yi = f.trainIdx.map(t => o.y[t]);
       const st = { best: -Infinity, params: grid[0] };
-      grid.forEach((params, gi) => tasks.push({ w: cost * (f.trainIdx.length / o.X.length), run: () => {
-        const cv = executeCrossValidation(Xi, yi, o.kFolds, o.modelType, params, o.isClassification, getRandomFunc(o.isDeterministic), o.scalingType, o.splitStrategy, o.embargoRows, o.cvScheme, opts);
+      grid.forEach((params, gi) => tasks.push({ w: cost * (f.trainIdx.length / o.X.length), run: function* () {
+        const S2 = x47CvBegin(Xi, yi, o.kFolds, o.modelType, params, o.isClassification, getRandomFunc(o.isDeterministic), o.scalingType, o.splitStrategy, o.embargoRows, o.cvScheme, opts);
+        while (S2.i < S2.folds.length) yield* q50CvFoldG(S2);
+        const cv = x47CvFinish(S2);
         if (cv.score > st.best) { st.best = cv.score; st.params = params; }
       }, label: () => `nested CV: outer fold ${fi + 1} of ${folds.length}, setting ${gi + 1} of ${grid.length}` }));
-      tasks.push({ w: cost / o.kFolds, run: () => {
+      tasks.push({ w: cost / o.kFolds, run: function* () {
         const Xo = f.valIdx.map(t => o.X[t]), yo = f.valIdx.map(t => o.y[t]);
         const sc = o.scalingType ? applyScaling(Xi, Xo, o.scalingType) : { scaledTrain: Xi, scaledVal: Xo };
-        const out = predictModel(o.modelType, sc.scaledTrain, yi, sc.scaledVal, st.params, o.isClassification, getRandomFunc(o.isDeterministic));
+        const out = yield* q50PredictG(o.modelType, sc.scaledTrain, yi, sc.scaledVal, st.params, o.isClassification, getRandomFunc(o.isDeterministic));
         const score = v46FoldScore(yo, out, o.isClassification, metric, thr).s;
         nest.folds.push({ params: st.params, innerScore: st.best, outerScore: score, nTrain: Xi.length, nVal: Xo.length });
       }, label: () => `nested CV: scoring outer fold ${fi + 1} of ${folds.length}` });
@@ -35756,6 +35851,20 @@ v45TuneGrid = function (o) {
   };
 })();
 
+/* v5.0: the same wrapper as a generator, for the sliced path (identical logic) */
+function* q50OOFG(ctx) {
+  let sig = null;
+  try { sig = x47Hash([ctx.modelType, JSON.stringify(ctx.params || {}), ctx.kFolds, ctx.isClassification ? 1 : 0, ctx.isDeterministic ? 1 : 0, ctx.splitStrategy || '', ctx.embargoRows || 0, ctx.cvScheme || '', ctx.scalingType || '', String(X47.seed), String(X47.runSeed), ctx.y, ctx.X]); } catch (e) {}
+  const R = X47.replay;
+  if (R && sig) {
+    const i = R.oof.findIndex((e, j) => j >= R.oi && e.sig === sig);
+    if (i >= 0) { R.oi = i + 1; const e = R.oof[i]; if (X47.logging) X47.oofLog.push(e); return { idx: e.idx.slice(), p: e.p.slice(), y: e.y.slice() }; }
+  }
+  const r = yield* q50OOFBaseG(ctx);
+  if (X47.logging && sig) X47.oofLog.push({ sig, idx: r.idx.slice(), p: r.p.slice(), y: r.y.slice() });
+  return r;
+}
+
 /* ---------- logging around a run ---------- */
 (function () {
   const start = () => {
@@ -35782,7 +35891,7 @@ function x47ProbeThen(algorithms, hpMode, k, X, y, isC, scalingType, pr, nested,
   const Xtr = X.slice(0, m), ytr = y.slice(0, m), Xva = X.slice(m, Math.min(n, m + 20));
   let i = 0;
   const one = () => {
-    if (v41JobCancelled()) { v41JobEnd(true); return; }
+    if (v41JobCancelled()) { next(); return; }
     if (i >= algorithms.length) {
       X47.probe = probe;
       pr.totalW = Math.max(1e-9, algorithms.reduce((a, al, j) => a + x47TuneWork(al.id, grids[j], nested, k), 0));
@@ -40374,7 +40483,8 @@ function x491BrBegin(st, params, yUse, frac, wantTrain) {
   currentSeed = saved;
   return S;
 }
-function x491BrFold(st, modelId, S) {
+function x491BrFold(st, modelId, S) { return q50Drain(q50BrFoldG(st, modelId, S)); }
+function* q50BrFoldG(st, modelId, S) {
   const f = S.folds[S.i++]; if (!f) return;
   if (f.valIdx.length === 0 || f.trainIdx.length < 2) return;
   const isC = st.isClassification, key = v46SelKey(isC);
@@ -40386,7 +40496,7 @@ function x491BrFold(st, modelId, S) {
     const Xtr = tri.map(t => X[t]), ytr = tri.map(t => y[t]), Xva = f.valIdx.map(t => X[t]), yva = f.valIdx.map(t => y[t]);
     if (isC && new Set(ytr).size < 2) { S.va.push(NaN); if (S.wantTrain) S.tr.push(NaN); return; }
     const sc = st.scalingType ? applyScaling(Xtr, Xva, st.scalingType) : { scaledTrain: Xtr, scaledVal: Xva };
-    const fm = fitModel(modelId, sc.scaledTrain, ytr, S.params, isC, S.rnd);
+    const fm = yield* q50Shield(q50FitTopG(modelId, sc.scaledTrain, ytr, S.params, isC, S.rnd), keep);
     const thr = v46Threshold();
     S.va.push(x491MetricOf(yva, Array.from(fm.predict(sc.scaledVal)), isC, key, thr));
     if (S.wantTrain) S.tr.push(x491MetricOf(ytr, Array.from(fm.predict(sc.scaledTrain)), isC, key, thr));
@@ -40399,23 +40509,29 @@ function x491BrCv(st, modelId, params, yUse, frac, wantTrain) {
   return x491BrEnd(S);
 }
 
-function x491LearningCurveData(st, modelId, params) {
+function x491LearningCurveData(st, modelId, params) { return q50Drain(q50LcDataG(st, modelId, params)); }
+function* q50LcDataG(st, modelId, params) {
   const isC = st.isClassification, key = v46SelKey(isC);
-  const pts = X491_LC_SIZES.map(fr => {
-    const r = x491BrCv(st, modelId, params || {}, null, fr, true);
-    return { fr, tr: r.tr, va: r.va, trSd: r.trSd, vaSd: r.vaSd, trF: r.trF, vaF: r.vaF };
-  });
+  const pts = [];
+  for (const fr of X491_LC_SIZES) {
+    const S = x491BrBegin(st, params || {}, null, fr, true);
+    while (S.i < S.folds.length) { yield* q50BrFoldG(st, modelId, S); yield; }
+    const r = x491BrEnd(S);
+    pts.push({ fr, tr: r.tr, va: r.va, trSd: r.trSd, vaSd: r.vaSd, trF: r.trF, vaF: r.vaF });
+  }
   const folds = x491BrBegin(st, params, null, 1, false).folds;
   pts.forEach(p => { p.n = Math.round(x491Mean(folds.map(f => Math.max(isC ? 4 : 3, Math.min(f.trainIdx.length, Math.floor(f.trainIdx.length * p.fr)))))); });
   return { key, isC, label: v46SelLabel(isC, key), better: v46SelBetter(isC, key), nFolds: folds.length, model: modelId, pts };
 }
-renderLearningCurve = function (X_train, y_train, X_val, y_val, modelType, isClassification, randFunc, bestParams) {
-  const cv = document.getElementById('learningCurveChart'); if (!cv) return;
-  if (learningCurveChartInstance) { learningCurveChartInstance.destroy(); learningCurveChartInstance = null; }
+renderLearningCurve = function () { const draw = q50Drain(q50LcG.apply(this, arguments)); if (typeof draw === 'function') draw(); };
+function* q50LcG(X_train, y_train, X_val, y_val, modelType, isClassification, randFunc, bestParams) {
+  const cv = document.getElementById('learningCurveChart'); if (!cv) return null;
   const st = globalState;
-  if (!st || !st.y_train || !(st.X_train_unscaled || st.X_train)) return;
+  if (!st || !st.y_train || !(st.X_train_unscaled || st.X_train)) { if (learningCurveChartInstance) { learningCurveChartInstance.destroy(); learningCurveChartInstance = null; } return null; }
   let L;
-  try { L = x491LearningCurveData(st, modelType || st.modelType, (arguments[7] || st.bestParams || {})); } catch (e) { console.error('x491 learning curve', e); return; }
+  try { L = yield* q50LcDataG(st, modelType || st.modelType, (bestParams || st.bestParams || {})); } catch (e) { if (q50IsStop(e)) throw e; console.error('x491 learning curve', e); return null; }
+  return () => {
+  if (learningCurveChartInstance) { learningCurveChartInstance.destroy(); learningCurveChartInstance = null; }
   st.x491lc = L;
   const P = L.pts;
   const band = P.map(p => [p.va - (Number.isFinite(p.vaSd) ? p.vaSd : 0), p.va + (Number.isFinite(p.vaSd) ? p.vaSd : 0)]);
@@ -40440,7 +40556,8 @@ renderLearningCurve = function (X_train, y_train, X_val, y_val, modelType, isCla
   });
   try { x491LcNote(L); } catch (e) {}
   try { if (typeof x491OfRender === 'function') x491OfRender(); } catch (e) {}
-};
+  };
+}
 function x491LcNote(L) {
   const card = document.getElementById('learningCurveCard'); if (!card) return;
   let n = document.getElementById('x491LcNote');
@@ -46209,6 +46326,674 @@ function x54LiveUpdate() {
   const go = () => { try { x54InstallPyBtn(); x54Buttons(); x54TaskLine(); } catch (e) { console.error('x54 install', e); } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
   setTimeout(go, 600);
+})();
+
+</script>
+<style id="x55-style">
+/* v5.0 speed and Stop fixes */
+#thresholdCard .q50-thrrow { display: flex; align-items: center; gap: 4px; }
+#thresholdCard .q50-thrrow .v41-help { order: 1; }
+#q50ThrBox { order: 2; margin-left: auto; width: 76px; padding: 3px 6px; text-align: right; font-family: var(--font-mono); font-weight: 600;
+  font-variant-numeric: tabular-nums; color: var(--accent); background: var(--card); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; -moz-appearance: textfield; }
+#q50ThrBox:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+#q50ThrBox::-webkit-outer-spin-button, #q50ThrBox::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+#q50ThrNote { display: none; font-size: 11px; color: var(--warn-text, #92400e); background: var(--warn-bg, #fffbeb); border: 1px solid var(--warn-border, #d97706); border-radius: 6px; padding: 4px 8px; margin: 2px 0 6px; }
+/* the red Stop button */
+button.q50-stopbtn, body.v41-busy button.q50-stopbtn, body.v41-busy #leftPanel button.q50-stopbtn, body.v41-busy #v452Right button.q50-stopbtn {
+  background: #C42B1C !important; border-color: #C42B1C !important; color: #fff !important; pointer-events: auto !important; cursor: pointer !important; opacity: 1 !important; }
+button.q50-stopbtn:hover { background: #A32314 !important; border-color: #A32314 !important; }
+button.q50-stopbtn.q50-stopping { background: #8F5C55 !important; border-color: #8F5C55 !important; cursor: progress !important; }
+body.v41-busy .grid > div:first-child { opacity: 1; }
+#v41CancelJob.q50-ovstop { background: #C42B1C; border-color: #C42B1C; color: #fff; }
+#v41CancelJob.q50-ovstop:hover { background: #A32314; }
+/* the "finished" box */
+#q50Done { position: fixed; right: 18px; bottom: 18px; z-index: 10050; display: flex; align-items: flex-start; gap: 10px; max-width: 420px; min-width: 280px;
+  padding: 12px 36px 12px 12px; background: var(--card); color: var(--text); border: 1px solid var(--border); border-left: 4px solid var(--success);
+  border-radius: 10px; box-shadow: var(--pop-shadow, 0 12px 32px rgba(0,0,0,.2)); font-size: 13px; animation: q50In .22s ease-out; }
+#q50Done.q50-stop { border-left-color: var(--warning); }
+#q50Done.q50-err { border-left-color: var(--danger, #b8321f); }
+#q50Done .q50-ic { flex: 0 0 auto; color: var(--success); line-height: 0; margin-top: 1px; }
+#q50Done.q50-stop .q50-ic { color: var(--warning); }
+#q50Done.q50-err .q50-ic { color: var(--danger, #b8321f); }
+#q50Done .q50-head { font-weight: 600; color: var(--heading, var(--text)); }
+#q50Done .q50-text { margin-top: 3px; color: var(--muted); line-height: 1.4; }
+#q50Done .q50-see { margin-top: 8px; padding: 4px 12px; width: auto; font-size: 12px; background: var(--accent); color: var(--on-accent, #fff); border: 0; border-radius: 6px; cursor: pointer; }
+#q50Done .q50-x { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; padding: 0; margin: 0; background: transparent; color: var(--muted); border: 0; font-size: 18px; line-height: 1; cursor: pointer; border-radius: 6px; }
+#q50Done .q50-x:hover { background: var(--surface, rgba(0,0,0,.05)); color: var(--text); }
+@keyframes q50In { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media print { #q50Done { display: none !important; } }
+.q50-partial { background: var(--warn-bg, #fffbeb); border: 1px solid var(--warn-border, #d97706); color: var(--warn-text, #92400e); padding: 8px 10px; border-radius: 6px; font-size: 12px; margin-bottom: 8px; }
+</style>
+<script id="x55-layer">
+/* =====================================================================
+   4Cast Lab v5.0 (speed and Stop fixes, 22 Oct 2026)
+   1. Long jobs never freeze the window: the slow computations are
+      generators run in short slices (q50Run). Same code, same order,
+      same random stream as before, so the numbers do not change.
+   2. Decision Threshold: the two Confusion Matrices follow the slider live;
+      the rest updates on release. Partial dependence, ICE and the
+      two-feature PDP (which the threshold does not change) are not
+      recomputed, and are drawn in the background when they are needed.
+   3. A number box next to the slider (any value from 0 to 1).
+   4. Stop: the button that started a job turns into a red Stop (Esc too).
+   5. A message when a long job finishes (box, short sound, window title).
+   ===================================================================== */
+const Q50 = { slice: 40, bg: [], bgCur: null, bgWait: [], fresh: {}, cur: null, partial: null, pendAll: null, inUT: 0, lastBtn: null, lastBtnT: 0, lastTitle: '' };
+const Q50_STOP = { q50stop: true, message: 'Stopped' };
+function q50IsStop(e) { return !!(e && e.q50stop); }
+function q50Cancelled() { try { return v41JobCancelled(); } catch (e) { return false; } }
+function q50Tick() { return new Promise(r => X47_YIELD(r)); }
+async function q50Pause() { await q50Tick(); if (q50Cancelled()) throw Q50_STOP; }
+/* runs a generator in slices of about 40 ms; rejects with Q50_STOP on Stop */
+function q50Run(gen, opt) {
+  opt = opt || {};
+  const cancelled = opt.cancelled || q50Cancelled;
+  return new Promise((resolve, reject) => {
+    const step = () => {
+      if (cancelled()) { try { gen.return(); } catch (e) {} reject(Q50_STOP); return; }
+      if (opt.hold && opt.hold()) { setTimeout(step, 60); return; }
+      const t0 = performance.now();
+      try {
+        for (;;) {
+          const r = gen.next();
+          if (r.done) { resolve(r.value); return; }
+          if (performance.now() - t0 > Q50.slice) break;
+        }
+      } catch (e) { reject(e); return; }
+      X47_YIELD(step);
+    };
+    step();
+  });
+}
+
+
+/* ---------- the fit chain as generators (same layers as fitModel: AutoML, kernel, SVM Platt) ---------- */
+/* runs g; during each pause the global random seed shows the outside value */
+function* q50Shield(g, outer) {
+  for (;;) { const r = g.next(); if (r.done) return r.value; const inner = currentSeed; currentSeed = outer; yield; currentSeed = inner; }
+}
+/* v4.6: the SVM kernel of a fit is read from the Kernel drop-down, set for the fit (put back during pauses) */
+function* q50FitV46G(modelType, X, y, params, isC, randFunc) {
+  const k = modelType === 'svm' && params && params.kernel;
+  if (!k) return yield* q50FitV451G.call(this, modelType, X, y, params, isC, randFunc);
+  const el = document.getElementById('svmKernel');
+  const swap = (el && el.value !== k) ? el.value : null;
+  const g = q50FitV451G.call(this, modelType, X, y, params, isC, randFunc);
+  let m;
+  if (swap !== null) el.value = k;
+  try {
+    for (;;) { const r = g.next(); if (r.done) { m = r.value; break; } if (swap !== null) el.value = swap; yield; if (swap !== null) el.value = k; }
+  } finally { if (swap !== null) el.value = swap; }
+  if (m && typeof m.predict === 'function') {
+    const p0 = m.predict;
+    m.predict = function () { const a = arguments, s = this; return v46WithKernel(k, () => p0.apply(s, a)); };
+    if (typeof m.decision === 'function') { const d0 = m.decision; m.decision = function () { const a = arguments, s = this; return v46WithKernel(k, () => d0.apply(s, a)); }; }
+    m.kernel = k;
+  }
+  return m;
+}
+/* v5.0 AutoML: predictor selection inside every fit */
+function* q50FitTopG(modelType, X, y, params, isC, randFunc) {
+  const A = (typeof X50 !== 'undefined') ? X50.active : null;
+  if (!A || A.task === 'mc' || X50.depth > 0 || !X || X.length < 20 || !X[0] || X[0].length < 2) return yield* q50FitV46G.call(this, modelType, X, y, params, isC, randFunc);
+  X50.depth++;
+  try {
+    const S = x50SelectCached(X, y, isC ? 'bin' : 'reg');
+    const m = yield* q50FitV46G.call(this, modelType, x50Sub(X, S.cols), y, params, isC, randFunc);
+    return x50WrapModel(m, S.cols, X[0].length, S);
+  } finally { X50.depth--; }
+}
+function* q50PredictG(modelType, X_train, y_train, X_test, params, isC, randFunc) {
+  if (!X_train || X_train.length === 0 || !X_test || X_test.length === 0) return [];
+  const m = yield* q50FitTopG(modelType, X_train, y_train, params, isC, randFunc);
+  return m.predict(X_test);
+}
+/* one CV fold of the tuning, with the AutoML fold imputation (as the x47CvFold wrapper) */
+function* q50CvFoldG(S) {
+  const A = (typeof X50 !== 'undefined') ? X50.active : null, st = globalState;
+  let keepX = null;
+  if (A && A.foldImpute && st && st.v45raw && S.X === st.X_train_unscaled && st.v45raw.train && st.v45raw.train.length === S.X.length) {
+    const f = S.folds[S.i];
+    if (f) { const Xp = x50FoldPatch(S.X, st.v45raw.train, st.features, f.trainIdx, f.trainIdx.concat(f.valIdx)); if (Xp) { keepX = S.X; S.X = Xp; } }
+  }
+  try { return yield* q50CvFoldBaseG(S); } finally { if (keepX) S.X = keepX; }
+}
+
+/* ---------- what a Stop restores (Train, Train All before the first model) ---------- */
+function q50Snapshot() {
+  const sel = id => { const e = document.getElementById(id); return e ? { h: e.innerHTML, v: e.value } : null; };
+  return {
+    gs: globalState, rank: globalRankingData, ens: ensembleResultsData,
+    features: typeof features !== 'undefined' ? features : null,
+    processed: typeof processedData !== 'undefined' ? processedData : null,
+    thr: (document.getElementById('probThreshold') || {}).value,
+    sels: { pdpFeatureSelect: sel('pdpFeatureSelect'), iceFeatureSelect: sel('iceFeatureSelect'), pdp2dX: sel('pdp2dX'), pdp2dY: sel('pdp2dY') }
+  };
+}
+function q50Restore(p) {
+  if (!p) return;
+  globalState = p.gs; globalRankingData = p.rank; ensembleResultsData = p.ens;
+  try { if (p.features) features = p.features; } catch (e) {}
+  try { if (p.processed) processedData = p.processed; } catch (e) {}
+  const s = document.getElementById('probThreshold'); if (s && p.thr != null) s.value = p.thr;
+  Object.entries(p.sels || {}).forEach(([id, v]) => { const e = document.getElementById(id); if (e && v) { e.innerHTML = v.h; e.value = v.v; } });
+  q50SyncBox();
+}
+
+/* =====================================================================
+   PDP, ICE and the two-feature PDP in the background
+   The first step (with the random draws) runs at once, so the random
+   stream is used in the same order as before; the rest uses no random
+   numbers and runs in slices, one chart after the other.
+   ===================================================================== */
+const Q50_PDP = {
+  pdp:   { gen: () => q50PdpG(),  key: () => [q50Val('pdpFeatureSelect')] },
+  ice:   { gen: () => q50IceG(),  key: () => [q50Val('iceFeatureSelect')] },
+  pdp2d: { gen: () => q50Pdp2G(), key: () => [q50Val('pdp2dX'), q50Val('pdp2dY')] }
+};
+function q50Val(id) { const e = document.getElementById(id); return e ? e.value : ''; }
+function q50PdpKey(name) { const st = globalState; return { m: st && st.fittedModel, k: Q50_PDP[name].key().join('|') }; }
+function q50PdpFresh(name) {
+  const f = Q50.fresh[name], k = q50PdpKey(name);
+  return !!(f && f.m && f.m === k.m && f.k === k.k);
+}
+function q50PdpRequest(name) {
+  const fresh = Q50.inUT > 0 && q50PdpFresh(name);
+  let gen;
+  try { gen = Q50_PDP[name].gen(); } catch (e) { console.error('x55 ' + name, e); return; }
+  let r;
+  try { r = gen.next(); } catch (e) { console.error('x55 ' + name, e); return; }
+  if (fresh) { try { gen.return(); } catch (e) {} return; }      // the threshold does not change it: keep the chart
+  if (r.done) { Q50.fresh[name] = null; return; }
+  Q50.bg = Q50.bg.filter(t => { if (t.name === name) { try { t.gen.return(); } catch (e) {} return false; } return true; });
+  if (Q50.bgCur && Q50.bgCur.name === name) Q50.bgCur.dead = true;
+  Q50.fresh[name] = q50PdpKey(name);
+  Q50.bg.push({ name, gen });
+  q50BgPump();
+}
+function q50BgPump() {
+  if (Q50.bgCur) return;
+  const t = Q50.bg.shift();
+  if (!t) { const w = Q50.bgWait; Q50.bgWait = []; w.forEach(f => { try { f(); } catch (e) {} }); return; }
+  Q50.bgCur = t;
+  q50Run(t.gen, { cancelled: () => !!t.dead, hold: () => Q50.holding || performance.now() < (Q50.holdUntil || 0) || !!(V41 && V41.job) })
+    .catch(e => { if (!q50IsStop(e)) console.error('x55 ' + t.name, e); if (Q50.fresh[t.name] && !t.dead) Q50.fresh[t.name] = null; })
+    .then(() => { Q50.bgCur = null; X47_YIELD(q50BgPump); });
+}
+function q50BgBusy() { return !!(Q50.bgCur || Q50.bg.length); }
+function q50BgIdle() { return new Promise(res => { if (!q50BgBusy()) res(); else Q50.bgWait.push(res); }); }
+function q50BgAbort() {
+  Q50.bg.forEach(t => { try { t.gen.return(); } catch (e) {} Q50.fresh[t.name] = null; });
+  Q50.bg = [];
+  if (Q50.bgCur) { Q50.bgCur.dead = true; Q50.fresh[Q50.bgCur.name] = null; }
+}
+Q50.laneBusy = q50BgBusy;
+(function () {
+  const sync = { pdp: renderPDP, ice: renderICE, pdp2d: renderPDP2D };
+  renderPDP = function () { if (Q50.syncPdp) return sync.pdp.apply(this, arguments); q50PdpRequest('pdp'); };
+  renderICE = function () { if (Q50.syncPdp) return sync.ice.apply(this, arguments); q50PdpRequest('ice'); };
+  renderPDP2D = function () { if (Q50.syncPdp) return sync.pdp2d.apply(this, arguments); q50PdpRequest('pdp2d'); };
+  const oU = updateThreshold;
+  updateThreshold = function () {
+    Q50.inUT++;
+    try { return oU.apply(this, arguments); }
+    finally { Q50.inUT--; if (!Q50.inUT) { try { q50SyncBox(); x47Summaries(); } catch (e) {} } }
+  };
+  // reports and figure export read the canvases: draw what is pending first, at once
+  ['downloadAllFigures', 'generateReport', 'buildResultsReport', 'v41FullReportForecast'].forEach(n => {
+    const o = window[n]; if (typeof o !== 'function') return;
+    window[n] = function () {
+      if (q50BgBusy()) { const names = [Q50.bgCur && !Q50.bgCur.dead ? Q50.bgCur.name : null].concat(Q50.bg.map(t => t.name)).filter(Boolean); q50BgAbort(); Q50.syncPdp = true; try { names.forEach(nm => { try { sync[nm](); Q50.fresh[nm] = q50PdpKey(nm); } catch (e) {} }); } finally { Q50.syncPdp = false; } }
+      return o.apply(this, arguments);
+    };
+  });
+})();
+
+/* =====================================================================
+   Decision Threshold: live Confusion Matrices, a number box, the summary
+   ===================================================================== */
+function q50FmtThr(t) {
+  t = Number(t);
+  if (!Number.isFinite(t)) return 'N/A';
+  const r2 = Math.round(t * 100) / 100;
+  return Math.abs(t - r2) < 1e-9 ? t.toFixed(2) : String(+t.toFixed(3));
+}
+function q50SyncBox() {
+  const s = document.getElementById('probThreshold'), b = document.getElementById('q50ThrBox');
+  if (!s || !b || document.activeElement === b) return;
+  const t = parseFloat(s.value);
+  const txt = q50FmtThr(t);
+  if (b.value !== txt) b.value = txt;
+}
+/* every write to the slider (rules, the ROC card, sessions, resets) also updates the box */
+(function () {
+  const s = document.getElementById('probThreshold'); if (!s) return;
+  const d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+  if (!d || !d.set) return;
+  Object.defineProperty(s, 'value', {
+    configurable: true,
+    get() { return d.get.call(this); },
+    set(v) { d.set.call(this, v); try { q50SyncBox(); } catch (e) {} }
+  });
+})();
+/* moving the slider switches the rule to Manual (as before) */
+function q50ManualRule() {
+  const r = document.getElementById('thrRule');
+  if (r && r.value !== 'manual') {
+    r.value = 'manual';
+    const st = globalState;
+    const set = info => { if (info && info.thr) info.thr.rule = 'manual'; };
+    if (st) { set(st.v45); (ensembleResultsData || []).forEach(x => set(x.v45)); }
+    if (V45.run) V45.run.rule = 'manual';
+    try { v45RuleNote(); } catch (e) {}
+  }
+}
+/* while dragging: the value and the two Confusion Matrices, once per screen frame */
+function q50FastCM() {
+  const st = globalState;
+  if (!st || !st.isClassification || !st.rawTrainOutputs || !st.rawValOutputs || !st.y_train || !st.y_val) return;
+  if (V41.job) return;                       // a run is replacing the results
+  if (typeof x48IsMC === 'function' && document.body.classList.contains('x48-mc')) return;
+  const t = parseFloat(document.getElementById('probThreshold').value);
+  try {
+    renderCMWidget('cmTrain', calculateConfusionMatrix(st.y_train, thresholdPredictions(st.rawTrainOutputs, t)));
+    renderCMWidget('cmVal', calculateConfusionMatrix(st.y_val, thresholdPredictions(st.rawValOutputs, t)));
+  } catch (e) { console.error('x55 cm', e); }
+}
+function q50ThrLabel(t) { const l = document.getElementById('thresholdVal'); if (l) l.innerText = q50FmtThr(t); }
+function q50ThrDrag() {
+  const s = document.getElementById('probThreshold'); if (!s) return;
+  let t = parseFloat(s.value); if (!Number.isFinite(t)) return;
+  t = Math.round(t * 100) / 100;                // the slider moves on the 0.01 grid
+  Q50.holdUntil = performance.now() + 400;      // background charts wait while the slider moves
+  s.value = t.toFixed(2);
+  q50ThrLabel(t);
+  q50ManualRule();
+  if (!Q50.raf) Q50.raf = requestAnimationFrame(() => { Q50.raf = 0; q50FastCM(); try { x47Summaries(); } catch (e) {} });
+}
+/* on release (or Enter in the box): everything else, as before */
+function q50ThrCommit() {
+  q50ManualRule();
+  if (V41.job) return;                       // the run in progress draws the results at its end
+  try { onThresholdInput(); } catch (e) { console.error(e); }
+}
+function q50ThrNote(msg) {
+  const n = document.getElementById('q50ThrNote'); if (!n) return;
+  n.textContent = msg || ''; n.style.display = msg ? 'block' : 'none';
+  clearTimeout(Q50.noteT); if (msg) Q50.noteT = setTimeout(() => { n.style.display = 'none'; }, 6000);
+}
+function q50BoxApply() {
+  const b = document.getElementById('q50ThrBox'), s = document.getElementById('probThreshold'); if (!b || !s) return;
+  const raw = String(b.value).trim().replace(',', '.');
+  let t = parseFloat(raw);
+  if (!Number.isFinite(t)) { q50ThrNote('Type a number from 0 to 1, for example 0.785.'); b.value = q50FmtThr(parseFloat(s.value)); return; }
+  let note = '';
+  if (t < 0) { t = 0; note = 'The threshold cannot be below 0: set to 0 (every case is predicted 1).'; }
+  if (t > 1) { t = 1; note = 'The threshold cannot be above 1: set to 1 (no case is predicted 1 unless its probability is exactly 1).'; }
+  t = Math.round(t * 1000) / 1000;
+  q50ThrNote(note);
+  const changed = Math.abs(parseFloat(s.value) - t) > 1e-12;
+  s.value = String(t);
+  b.value = q50FmtThr(t);
+  q50ThrLabel(t);
+  if (changed || (document.getElementById('thrRule') || {}).value !== 'manual') { q50FastCM(); q50ThrCommit(); }
+}
+function q50InstallBox() {
+  const b = document.getElementById('q50ThrBox'); if (!b || b.dataset.q50) return;
+  b.dataset.q50 = '1';
+  const sl = document.getElementById('probThreshold');
+  if (sl) {
+    sl.addEventListener('pointerdown', () => { Q50.holding = true; });
+    const up = () => { if (Q50.holding) { Q50.holding = false; Q50.holdUntil = performance.now() + 250; } };
+    window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+  }
+  b.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); q50BoxApply(); b.select(); return; }
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      const s = document.getElementById('probThreshold');
+      let t = parseFloat(String(b.value).replace(',', '.')); if (!Number.isFinite(t)) t = parseFloat(s.value) || 0.5;
+      t = Math.min(1, Math.max(0, Math.round((t + (e.key === 'ArrowUp' ? 0.01 : -0.01)) * 1000) / 1000));
+      b.value = q50FmtThr(t);
+      q50BoxApply();
+      return;
+    }
+    if (e.key === 'Escape') { b.value = q50FmtThr(parseFloat(document.getElementById('probThreshold').value)); b.blur(); }
+  });
+  b.addEventListener('change', q50BoxApply);
+  b.addEventListener('blur', () => { setTimeout(q50SyncBox, 0); });
+  b.addEventListener('wheel', e => { if (document.activeElement === b) e.preventDefault(); }, { passive: false });
+  q50SyncBox();
+}
+
+/* =====================================================================
+   Train All: the explanation tabs for the selected model, as a job that
+   can be stopped. Everything is computed first, then drawn.
+   ===================================================================== */
+v462ComputeInterp = function (force) {
+  const st = globalState; if (!st || !st.showingEnsemble || !st.fittedModel || !st.X_val) return;
+  const key = [V41.runSeq, st.focusKey, (st.features || []).join(',')].join('|');
+  if (!force && V462.interpKey === key) return;
+  V462.interpKey = key;
+  if (V41.job) {                               // another job is running: try again when it ends
+    const k = key; V462.interpKey = null;
+    const again = () => { if (V41.job) { setTimeout(again, 300); return; } v462ComputeInterp(force); };
+    setTimeout(again, 300);
+    return;
+  }
+  q50Interp(st, key);
+};
+async function q50Interp(st, key) {
+  const name = v462ModelName(), fitted = st.fittedModel, features = st.features;
+  v41JobStart('interp');
+  const prog = (txt, p) => showProgress('Model used in the other tabs', `${name}: ${txt}...`, p);
+  try {
+    prog('Computing SHAP values', 20);
+    await q50Pause();
+    const shap = await q50Run(q50ShapG(fitted, st.X_val, features.length, getRandomFunc(st.isDeterministic)));
+    prog('Permutation importance and feature rankings', 45);
+    const rank = await q50Run(q50RankG(st.X_train, st.y_train, st.X_val, st.y_val, features, fitted, st.isClassification, getRandomFunc(st.isDeterministic), shap));
+    prog('Computing the SHAP beeswarm', 65);
+    const bee = await q50Run(q50BeeG(features, fitted, st.X_val, getRandomFunc(st.isDeterministic)));
+    prog('Computing the learning curve', 85);
+    const lc = await q50Run(q50LcG(st.X_train, st.y_train, st.X_val, st.y_val, st.modelType, st.isClassification, getRandomFunc(st.isDeterministic), st.bestParams, st.splitStrategy));
+    if (V462.interpKey !== key || globalState !== st) { v41JobEnd(false); hideProgress(); return; }
+    prog('Partial dependence and ICE', 97);
+    st.shapValues = shap;
+    globalRankingData = rank;
+    renderFeatureRankingTable();
+    try { renderPermCiChart(); } catch (e) {}
+    renderSHAPSummary(features, shap);
+    try { if (bee) bee(); } catch (e) { console.error('v462 interp', e); }
+    try { if (lc) lc(); } catch (e) { console.error('v462 interp', e); }
+    try { setupPDPSelect(features); renderPDP(); renderICE(); renderPDP2D(); v462CardTags(); } catch (e) { console.error('v462 interp', e); }
+    hideProgress();
+    try { updateTabCounts(); v41UpdateEmptyTabs(); } catch (e) {}
+    v41JobEnd(false);
+  } catch (e) {
+    V462.interpKey = null;
+    if (q50IsStop(e)) { v41JobEnd(true); return; }
+    console.error('v462 interp', e);
+    hideProgress(); v41JobEnd(false);
+  }
+}
+
+/* =====================================================================
+   Stop: the button that started a job becomes a red Stop; Esc too
+   ===================================================================== */
+const Q50_STOP_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" style="vertical-align:-2px;margin-right:6px"><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor"/></svg>';
+document.addEventListener('click', e => {
+  const b = e.target && e.target.closest ? e.target.closest('button') : null;
+  if (!b) return;
+  if (b.classList.contains('q50-stopbtn')) { e.preventDefault(); e.stopImmediatePropagation(); q50StopNow(); return; }
+  if (!b.closest('#floatingProgressOverlay') && !b.closest('#q50Done')) { Q50.lastBtn = b; Q50.lastBtnT = performance.now(); }
+}, true);
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (!(V41.job || (typeof bootRunning !== 'undefined' && bootRunning) || (typeof X50 !== 'undefined' && X50.running))) return;
+  e.preventDefault(); q50StopNow();
+}, true);
+function q50Visible(b) { return !!(b && b.offsetParent !== null && b.getClientRects().length); }
+function q50FindTrigger(kind) {
+  const pick = sel => { const all = Array.from(document.querySelectorAll(sel)); return all.find(b => q50Visible(b) && b.closest('#leftPanel')) || all.find(q50Visible) || null; };
+  if (kind === 'grid') return pick('button[onclick="runPipeline()"]');
+  if (kind === 'all') return pick('button[onclick="runTrainAll()"]');
+  const b = Q50.lastBtn;
+  if (b && performance.now() - Q50.lastBtnT < 4000 && q50Visible(b) && !b.classList.contains('tab-btn') && !b.classList.contains('v41-help') && !b.closest('.x47-gtabs')
+      && /\b(run|estimate|train|compute|start|check|select|test)/i.test(b.textContent || '')) return b;
+  return null;
+}
+function q50Morph(b) {
+  if (!b || b.classList.contains('q50-stopbtn')) return;
+  b.dataset.q50Html = b.innerHTML;
+  b.dataset.q50Dis = b.disabled ? '1' : '';
+  b.disabled = false;
+  b.classList.add('q50-stopbtn');
+  b.innerHTML = Q50_STOP_ICON + 'Stop';
+  b.setAttribute('title', 'Stop this job (Esc)');
+}
+function q50Unmorph(b) {
+  if (!b || !b.classList.contains('q50-stopbtn')) return;
+  b.classList.remove('q50-stopbtn', 'q50-stopping');
+  if (b.dataset.q50Html !== undefined) b.innerHTML = b.dataset.q50Html;
+  b.disabled = b.dataset.q50Dis === '1';
+  b.removeAttribute('title');
+  delete b.dataset.q50Html; delete b.dataset.q50Dis;
+}
+function q50UnmorphAll() { document.querySelectorAll('.q50-stopbtn').forEach(q50Unmorph); }
+function q50StopNow() {
+  if (Q50.cur) Q50.cur.stopReq = true;
+  document.querySelectorAll('.q50-stopbtn').forEach(b => { b.classList.add('q50-stopping'); b.innerHTML = Q50_STOP_ICON + 'Stopping…'; });
+  if (typeof X50 !== 'undefined' && X50.running) { try { x50Cancel(); } catch (e) {} return; }
+  if (typeof bootRunning !== 'undefined' && bootRunning) { try { cancelBootstrap(); } catch (e) {} return; }
+  try { v41CancelJob(); } catch (e) {}
+  const s = document.getElementById('overlayStatus'); if (s) s.innerText = 'Stopping after the current step...';
+}
+/* the job hooks: the button, the timer, the message */
+(function () {
+  const oS = v41JobStart, oE = v41JobEnd;
+  v41JobStart = function (kind) {
+    const r = oS.apply(this, arguments);         // (background charts wait while a job runs, then continue)
+    const inAll = kind === 'interp' && Q50.pendAll;
+    Q50.cur = { kind, t0: inAll ? Q50.pendAll.t0 : Date.now(), title: '', stopReq: false, err: '', btn: null, tab: null };
+    const b = kind === 'interp' && Q50.pendAll ? (Q50.pendAll.btn && document.contains(Q50.pendAll.btn) ? Q50.pendAll.btn : q50FindTrigger('all')) : q50FindTrigger(kind);
+    if (b) { q50Morph(b); Q50.cur.btn = b; const p = b.closest('.tab-panel'); Q50.cur.tab = p ? p.id : null; }
+    q50AudioPrime();
+    return r;
+  };
+  v41JobEnd = function (cancelled) {
+    const kind = V41.job ? V41.job.kind : null;
+    const J = Q50.cur;
+    let r;
+    try { r = oE.apply(this, arguments); }
+    finally {
+      q50UnmorphAll();
+      if (J && kind) {
+        const stopped = !!cancelled || !!J.stopReq;
+        Q50.cur = null;
+        if (kind === 'all' && !cancelled && !J.err) {
+          // the explanation tabs follow as their own job; the message comes at the end of both
+          Q50.pendAll = { t0: J.t0, partial: Q50.partial, btn: J.btn, stopReq: J.stopReq, tab: J.tab };
+          setTimeout(() => { if (Q50.pendAll && !V41.job) { const P = Q50.pendAll; Q50.pendAll = null; q50Finished('all', P.t0, P.stopReq && !P.partial ? true : false, '', P); } }, 1500);
+        } else if (kind === 'interp' && Q50.pendAll) {
+          const P = Q50.pendAll; Q50.pendAll = null;
+          q50Finished('all', P.t0, false, '', Object.assign({}, P, { interpStopped: stopped }));
+        } else {
+          setTimeout(() => q50Finished(kind, J.t0, stopped, J.err, J), 0);
+        }
+      }
+    }
+    return r;
+  };
+  // clearer words when a run is stopped
+  const oB = showValidationBanner;
+  showValidationBanner = function (msg, type) {
+    const J = Q50.cur;
+    if (J && typeof msg === 'string' && /failed:/i.test(msg)) J.err = msg;
+    // a stopped Train / Train All is reported by the "finished" box (no second message in a banner)
+    if (typeof msg === 'string' && (/^Training was cancelled during the hyperparameter search/.test(msg) || /^The comparison of all models was cancelled/.test(msg))
+        && !(typeof X50 !== 'undefined' && X50.running)) return;
+    return oB.call(this, msg, type);
+  };
+  const oP = showProgress;
+  showProgress = function (title) { if (V41.job && title) Q50.lastTitle = String(title); return oP.apply(this, arguments); };
+  // the old Cancel button of the progress window is now a red Stop
+  const c = document.getElementById('v41CancelJob');
+  if (c) { c.innerHTML = Q50_STOP_ICON + 'Stop'; c.title = 'Stop this job (Esc)'; c.classList.add('q50-ovstop'); c.onclick = () => q50StopNow(); }
+})();
+/* Bootstrap: its Run button becomes the Stop button; the replications done are kept, as before */
+(function () {
+  const o = runBootstrap;
+  runBootstrap = function () {
+    const r = o.apply(this, arguments);
+    if (typeof bootRunning !== 'undefined' && bootRunning) {
+      const t0 = Date.now(), b = document.getElementById('bootRunBtn'), cb = document.getElementById('bootCancelBtn');
+      Q50.boot = { t0, stopReq: false };
+      if (b) { q50Morph(b); }
+      if (cb) cb.style.display = 'none';
+      q50AudioPrime();
+      const poll = () => {
+        if (bootRunning) { setTimeout(poll, 250); return; }
+        if (b) { q50Unmorph(b); b.disabled = false; b.innerHTML = '&#9654; Run Bootstrap'; }
+        const br = typeof bootstrapRun !== 'undefined' ? bootstrapRun : null;
+        const stopped = !!(br && br.cancelled);
+        q50Finished('boot', t0, stopped, '', { tab: 'tabBootstrap', br });
+      };
+      setTimeout(poll, 250);
+    }
+    return r;
+  };
+  const oc = cancelBootstrap;
+  cancelBootstrap = function () { if (Q50.boot) Q50.boot.stopReq = true; return oc.apply(this, arguments); };
+})();
+/* AutoML: one message at the end of the whole run */
+(function () {
+  if (typeof x50Run !== 'function') return;
+  const o = x50Run;
+  x50Run = async function () {
+    if (X50.running) return o.apply(this, arguments);
+    const t0 = Date.now();
+    q50AudioPrime();
+    const r = await o.apply(this, arguments);
+    try { const E = X50.runErr; q50Finished('automl', t0, !!(X50.cancelReq || (E && E.cancel)), E && E.msg ? String(E.msg) : '', {}); } catch (e) {}
+    return r;
+  };
+})();
+
+/* =====================================================================
+   The "finished" message: a box that stays until closed, a short sound,
+   and the window title when the user is in another window
+   ===================================================================== */
+const Q50_TITLES = { grid: 'Train', all: 'Train All', unitroot: 'Unit-root tests', varsel: 'Variable selection', path: 'Regularization path',
+  rolling: 'Rolling-origin evaluation', overfit: 'Overfitting checks', boot: 'Bootstrap', automl: 'AutoML' };
+function q50Dur(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s} s`;
+  const m = Math.floor(s / 60), r = s % 60;
+  if (m < 60) return r ? `${m} min ${r} s` : `${m} min`;
+  const h = Math.floor(m / 60); return `${h} h ${m % 60} min`;
+}
+function q50Esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function q50MainResult(kind) {
+  const st = globalState; if (!st) return '';
+  try {
+    const isC = !!st.isClassification, key = v46SelKey(isC), short = v46SelShort(isC, key);
+    if (kind === 'grid' && !st.showingEnsemble && st.cvSummary && Number.isFinite(st.cvSummary.mean)) {
+      const v = v46FromScore(st.cvSummary.mean, isC, st.cvSummary.metric || key);
+      return `${v41AlgoLabel(st.modelType, isC) || st.modelType}: CV ${short} ${v46FmtSel(v, isC, key)}.`;
+    }
+    if (kind === 'all' && st.showingEnsemble) {
+      try { v46PrepareEnsemble(); } catch (e) {}
+      const sel = (typeof v46Selected === 'function' && v46Selected()) || (ensembleResultsData || []).find(e => e.selectedByCv);
+      if (sel && Number.isFinite(sel.cvSel)) return `Selected by CV: ${sel.label} (${short} ${v46FmtSel(sel.cvSel, isC, key)}).`;
+      if (sel) return `Selected by CV: ${sel.label}.`;
+    }
+  } catch (e) {}
+  return '';
+}
+function q50Finished(kind, t0, stopped, err, J) {
+  J = J || {};
+  if (typeof X50 !== 'undefined' && X50.running && kind !== 'automl') return;     // AutoML gives one message at its end
+  const ms = Date.now() - (t0 || Date.now());
+  const userStop = !!(stopped || J.stopReq || (J.br && J.br.cancelled));
+  if (ms < 5000 && !userStop && !err) return;                                       // short jobs need no message
+  let title = (kind && kind.indexOf('x53') === 0) ? 'Causality' : (Q50_TITLES[kind] || Q50.lastTitle || 'The job');
+  if (kind && kind.indexOf('x53') === 0 && Q50.lastTitle) title = Q50.lastTitle;
+  let icon = 'ok', head, text = '';
+  const dur = q50Dur(ms);
+  if (err) { icon = 'err'; head = `${title} stopped with an error`; text = `${q50Esc(err.replace(/^.*?failed:\s*/i, ''))}`; }
+  else if (kind === 'all' && J.partial) {
+    icon = 'stop'; head = `Train All stopped after ${dur}`;
+    text = `${J.partial.done} of ${J.partial.total} models finished and kept. ${q50Esc(q50MainResult('all').replace('Selected by CV:', 'Selected by CV among them:'))}`;
+  } else if (kind === 'all' && J.interpStopped) {
+    icon = 'stop'; head = `Train All finished in ${dur}`;
+    text = `${q50Esc(q50MainResult('all'))} The explanation tabs (XAI, learning curve) were stopped and still show the previous model.`;
+  } else if (userStop) {
+    icon = 'stop';
+    if (kind === 'boot') { const br = J.br; head = `Bootstrap stopped after ${dur}`; text = br ? `${br.B} of ${br.requestedB} replications done and kept.` : ''; }
+    else if (kind === 'grid' || kind === 'all') { head = `${title} stopped after ${dur}`; text = 'No new model was kept. The results on screen are from the previous run.'; }
+    else if (kind === 'automl') { head = `AutoML stopped after ${dur}`; text = ''; }
+    else { head = `${title} stopped after ${dur}`; text = 'No new results were kept.'; }
+  } else {
+    head = `${title} finished in ${dur}`;
+    text = q50Esc(q50MainResult(kind));
+  }
+  const tab = J.tab || ((kind === 'grid' || kind === 'all') ? 'tabModel' : (kind === 'boot' ? 'tabBootstrap' : (kind && kind.indexOf('x53') === 0 ? 'tabCausal' : null)));
+  q50ShowDone(icon, head, text, (icon !== 'err' && !(userStop && (kind === 'grid' || (kind === 'all' && !J.partial)))) && kind !== 'automl' ? tab : null);
+}
+function q50ShowDone(icon, head, text, tab) {
+  let box = document.getElementById('q50Done');
+  if (!box) {
+    box = document.createElement('div'); box.id = 'q50Done'; box.setAttribute('role', 'status'); box.setAttribute('aria-live', 'polite');
+    document.body.appendChild(box);
+  }
+  const ic = { ok: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    stop: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><rect x="8" y="8" width="8" height="8" rx="1.2" fill="#fff"/></svg>',
+    err: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M12 7v6M12 16.5v.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>' }[icon];
+  box.className = 'q50-done q50-' + icon;
+  box.innerHTML = `<div class="q50-ic">${ic}</div><div class="q50-body"><div class="q50-head">${q50Esc(head)}</div>${text ? `<div class="q50-text">${text}</div>` : ''}` +
+    `${tab ? `<button type="button" class="q50-see" data-tab="${q50Esc(tab)}">See results</button>` : ''}</div>` +
+    `<button type="button" class="q50-x" aria-label="Close">&times;</button>`;
+  box.querySelector('.q50-x').onclick = () => { box.remove(); q50TitleStop(); };
+  const see = box.querySelector('.q50-see');
+  if (see) see.onclick = () => { try { if (typeof v452ToForecasting === 'function') {} showTab(see.dataset.tab); } catch (e) {} box.remove(); q50TitleStop(); };
+  q50Chime(icon);
+  q50TitleFlash(icon === 'ok' ? '✓ Finished' : (icon === 'stop' ? '■ Stopped' : '⚠ Error'));
+}
+/* the sound: two short soft tones (Web Audio, nothing to download) */
+function q50AudioPrime() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    if (!Q50.ac) Q50.ac = new AC();
+    if (Q50.ac.state === 'suspended') Q50.ac.resume().catch(() => {});
+  } catch (e) {}
+}
+function q50Chime(icon) {
+  try {
+    q50AudioPrime(); const ac = Q50.ac; if (!ac) return;
+    const notes = icon === 'ok' ? [784, 1047] : (icon === 'stop' ? [659, 523] : [440, 349]);
+    const t = ac.currentTime + 0.02;
+    notes.forEach((f, i) => {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t + i * 0.16);
+      g.gain.exponentialRampToValueAtTime(0.18, t + i * 0.16 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.16 + 0.32);
+      o.connect(g).connect(ac.destination);
+      o.start(t + i * 0.16); o.stop(t + i * 0.16 + 0.35);
+    });
+  } catch (e) {}
+}
+/* the window title flashes while the user is in another window */
+function q50TitleFlash(word) {
+  q50TitleStop();
+  const away = document.hidden || (typeof document.hasFocus === 'function' && !document.hasFocus());
+  if (!away) return;
+  const base = document.title;
+  Q50.titleBase = base; let on = true;
+  document.title = `${word} · ${base}`;
+  Q50.titleT = setInterval(() => { on = !on; document.title = on ? `${word} · ${Q50.titleBase}` : Q50.titleBase; }, 1000);
+}
+function q50TitleStop() {
+  if (Q50.titleT) { clearInterval(Q50.titleT); Q50.titleT = null; if (Q50.titleBase != null) document.title = Q50.titleBase; Q50.titleBase = null; }
+}
+window.addEventListener('focus', q50TitleStop);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && document.hasFocus()) q50TitleStop(); });
+
+/* Train All stopped part-way: a note above the comparison table */
+function q50PartialNote() {
+  const ban = document.getElementById('ensembleTuningBanner'); if (!ban) return;
+  let n = document.getElementById('q50PartialNote');
+  if (!Q50.partial) { if (n) n.remove(); return; }
+  if (!n) { n = document.createElement('div'); n.id = 'q50PartialNote'; n.className = 'q50-partial'; ban.parentNode.insertBefore(n, ban); }
+  n.innerHTML = `<b>Stopped after ${Q50.partial.done} of ${Q50.partial.total} models.</b> The table shows the models that finished; the model selected by CV is the best of these. Train All again to compare all ${Q50.partial.total}.`;
+}
+
+/* ---------- install ---------- */
+(function () {
+  const go = () => { try { q50InstallBox(); q50SyncBox(); } catch (e) { console.error('x55 install', e); } };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
+  setTimeout(go, 700);
 })();
 
 </script>
