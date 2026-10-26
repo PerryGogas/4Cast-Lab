@@ -50848,7 +50848,7 @@ function q53pBusy(title, fn) {
 function q53pRunKm() {
   const D = q53pData(Q53P.set.kmStd); if (D.error) { showValidationBanner(D.error); return; }
   q53pBusy('k-means', () => {
-    const Kmax = Math.min(10, D.n - 1);
+    const kWant = Q53P.set.kmK === 'auto' ? 10 : (parseInt(Q53P.set.kmK, 10) || 10), Kmax = Math.min(Math.max(10, kWant), D.n - 1);
     const es = q53pSample(D.n, 5000, Q53P_SEED + 1), Ze = es ? es.map(i => D.Z[i]) : D.Z;
     const ss = q53pSample(Ze.length, 2000, Q53P_SEED + 2);
     const elbow = [];
@@ -50883,7 +50883,7 @@ function q53pRunHc() {
     const L = q53pLinkage(Zs, Q53P.set.hcLink);
     // suggested k: the largest gap between successive merge heights, among 2 to 10 groups
     let best = 2, gap = -Infinity;
-    for (let k = 2; k <= Math.min(10, n - 1); k++) { const g = L[n - k][2] - L[n - k - 1][2]; if (g > gap) { gap = g; best = k; } }
+    for (let k = 2; k <= Math.min(10, n - 2); k++) { const g = L[n - k][2] - L[n - k - 1][2]; if (g > gap) { gap = g; best = k; } }
     const k = Q53P.set.hcK === 'auto' ? best : Math.min(n - 1, parseInt(Q53P.set.hcK, 10) || best);
     const lab = q53pCut(L, n, k);
     const sizes = new Array(k).fill(0); lab.forEach(v => sizes[v]++);
@@ -51038,7 +51038,7 @@ function q53pKmHTML(forReport) {
   let h = '';
   if (!forReport) {
     h += `<div class="x53-intro">Splits the rows into k groups so that the rows of each group are as close as possible to the group's centre (the average row). It uses the ticked predictors; no target is needed.</div>`;
-    h += `<div class="x53-set"><label>Number of groups (k) <select onchange="Q53P.set.kmK = this.value">${['auto'].concat([2, 3, 4, 5, 6, 7, 8, 9, 10].map(String)).map(v => `<option value="${v}"${s.kmK === v ? ' selected' : ''}>${v === 'auto' ? 'Best by silhouette' : v}</option>`).join('')}</select></label>${q53pStdSwitch('kmStd')}
+    h += `<div class="x53-set"><label>Number of groups (k) <select onchange="Q53P.set.kmK = this.value; if (Q53P.km) q53pRunKm()">${['auto'].concat([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map(String)).map(v => `<option value="${v}"${s.kmK === v ? ' selected' : ''}>${v === 'auto' ? 'Best by silhouette' : v}</option>`).join('')}</select></label>${q53pStdSwitch('kmStd')}
       <button type="button" class="x53-btn" onclick="q53pRunKm()">Run k-means</button></div>`;
   }
   if (!R) return h + (forReport ? '' : '<div class="x53-empty">No groups yet.</div>');
@@ -51068,7 +51068,7 @@ function q53pHcHTML(forReport) {
   if (!forReport) {
     h += `<div class="x53-intro">Starts with every row as its own group and merges the two closest groups, again and again, until one group is left. The dendrogram shows the merges; cutting it at a height gives the groups.</div>`;
     h += `<div class="x53-set"><label>Linkage <select onchange="Q53P.set.hcLink = this.value"><option value="ward"${s.hcLink === 'ward' ? ' selected' : ''}>Ward</option><option value="complete"${s.hcLink === 'complete' ? ' selected' : ''}>Complete</option><option value="average"${s.hcLink === 'average' ? ' selected' : ''}>Average</option></select></label>
-      <label>Number of groups <select onchange="Q53P.set.hcK = this.value">${['auto'].concat([2, 3, 4, 5, 6, 7, 8, 9, 10].map(String)).map(v => `<option value="${v}"${s.hcK === v ? ' selected' : ''}>${v === 'auto' ? 'At the largest gap' : v}</option>`).join('')}</select></label>${q53pStdSwitch('hcStd')}
+      <label>Number of groups <select onchange="Q53P.set.hcK = this.value; if (Q53P.hc) q53pRunHc()">${['auto'].concat([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map(String)).map(v => `<option value="${v}"${s.hcK === v ? ' selected' : ''}>${v === 'auto' ? 'At the largest gap' : v}</option>`).join('')}</select></label>${q53pStdSwitch('hcStd')}
       <button type="button" class="x53-btn" onclick="q53pRunHc()">Run clustering</button></div>`;
   }
   if (!R) return h + (forReport ? '' : '<div class="x53-empty">No dendrogram yet.</div>');
@@ -51709,6 +51709,22 @@ async function q54Docx(html, meta) {
     return await W.package();
   } finally { host.remove(); }
 }
+/* the fill of a coloured cell (confusion matrices, heat maps): saturated or clearly tinted backgrounds only, blended over white */
+function q54Rgb(c) { const m = String(c || '').match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+))?/); if (!m) return null; return { r: +m[1], g: +m[2], b: +m[3], a: m[4] === undefined ? 1 : +m[4] }; }
+function q54Hex(r, g, b) { return [r, g, b].map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('').toUpperCase(); }
+function q54Fill(el) {
+  let c; try { c = q54Rgb(getComputedStyle(el).backgroundColor); } catch (e) { return null; }
+  if (!c || c.a < 0.04) return null;
+  const r = 255 + (c.r - 255) * c.a, g = 255 + (c.g - 255) * c.a, b = 255 + (c.b - 255) * c.a, mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  if (mx - mn < 14 && mn > 225) return null;          // white and the light grey stripes of plain tables
+  return q54Hex(r, g, b);
+}
+function q54TextColor(el) {
+  let c; try { c = q54Rgb(getComputedStyle(el).color); } catch (e) { return null; }
+  if (!c) return null;
+  const mx = Math.max(c.r, c.g, c.b), mn = Math.min(c.r, c.g, c.b);
+  return (mx - mn > 60 || mn > 200) ? q54Hex(c.r, c.g, c.b) : null;   // coloured text, or white text on a dark fill
+}
 class Q54Writer {
   constructor(meta) { this.meta = meta; this.body = []; this.media = []; this.nTab = 0; this.nFig = 0; this.lastHead = ''; this.nH1 = 0; this.nums = []; this.docPr = 0; }
   skip(el) {
@@ -51740,7 +51756,7 @@ class Q54Writer {
       if (tg === 'SUP') g.sup = true;
       if (tg === 'SUB') g.sub = true;
       if (tg === 'CODE' || tg === 'KBD' || tg === 'SAMP') g.code = true;
-      try { const cs = getComputedStyle(ch); if (parseInt(cs.fontWeight, 10) >= 600) g.b = true; if (cs.fontStyle === 'italic') g.i = true; } catch (e) {}
+      try { const cs = getComputedStyle(ch); if (parseInt(cs.fontWeight, 10) >= 600) g.b = true; if (cs.fontStyle === 'italic') g.i = true; const tc = q54TextColor(ch); if (tc) g.color = tc; } catch (e) {}
       this.runs(ch, g, out);
     });
     return out;
@@ -51753,6 +51769,7 @@ class Q54Writer {
     if (r.i) pr.push('<w:i/><w:iCs/>');
     if (r.sup) pr.push('<w:vertAlign w:val="superscript"/>');
     if (r.sub) pr.push('<w:vertAlign w:val="subscript"/>');
+    if (r.color) pr.push(`<w:color w:val="${r.color}"/>`);
     return `<w:r>${pr.length ? `<w:rPr>${pr.join('')}</w:rPr>` : ''}<w:t xml:space="preserve">${q54X(r.t)}</w:t></w:r>`;
   }
   /* a paragraph from runs (leading / trailing spaces trimmed); images inside go to their own paragraphs */
@@ -51782,7 +51799,7 @@ class Q54Writer {
   text(el) { return (el.textContent || '').replace(/\s+/g, ' ').trim(); }
   container(node, ctx) {
     let pending = [];
-    const flush = () => { if (pending.length) { const rs = []; pending.forEach(n => { if (n.nodeType === 3) { const t = n.nodeValue.replace(/\s+/g, ' '); if (t) rs.push({ t }); } else this.runs({ childNodes: [n] }, {}, rs); }); this.para(rs, ctx.cell ? 'TableText' : null, { into: ctx.into, align: ctx.align }); pending = []; } };
+    const flush = () => { if (pending.length) { const rs = []; pending.forEach(n => { if (n.nodeType === 3) { const t = n.nodeValue.replace(/\s+/g, ' '); if (t) rs.push(ctx.color ? { t, color: ctx.color } : { t }); } else this.runs({ childNodes: [n] }, ctx.color ? { color: ctx.color } : {}, rs); }); this.para(rs, ctx.cell ? 'TableText' : null, { into: ctx.into, align: ctx.align }); pending = []; } };
     node.childNodes.forEach(ch => {
       if (ch.nodeType === 3) { pending.push(ch); return; }
       if (ch.nodeType !== 1 || this.skip(ch)) return;
@@ -51886,10 +51903,11 @@ class Q54Writer {
         const align = (() => { const ta = (td.getAttribute('style') || '').match(/text-align\s*:\s*(left|right|center)/); if (ta) return ta[1] === 'left' ? 'left' : ta[1] === 'right' ? 'right' : 'center'; return ci === 0 ? 'left' : 'center'; })();
         const sub = [];
         const cctx = { cell: true, into: sub, align };
-        if (td.tagName === 'TH') { const rs = this.runs(td, { b: true }); if (td.querySelector('table, img, ul, ol')) this.container(td, cctx); else this.para(rs, 'TableText', { into: sub, align }); }
-        else this.container(td, cctx);
+        const fill = q54Fill(td) || (head ? 'F2F2F2' : null), tdc = q54TextColor(td);
+        if (td.tagName === 'TH') { const rs = this.runs(td, tdc ? { b: true, color: tdc } : { b: true }); if (td.querySelector('table, img, ul, ol')) this.container(td, cctx); else this.para(rs, 'TableText', { into: sub, align }); }
+        else { cctx.color = tdc; this.container(td, cctx); }
         if (!sub.length || !/<w:p[ >]/.test(sub[sub.length - 1]) || /^<w:tbl>/.test(sub[sub.length - 1])) sub.push('<w:p><w:pPr><w:pStyle w:val="TableText"/></w:pPr></w:p>');
-        out.push(`<w:tc><w:tcPr><w:tcW w:w="${w0}" w:type="dxa"/>${span > 1 ? `<w:gridSpan w:val="${span}"/>` : ''}${head ? '<w:shd w:val="clear" w:color="auto" w:fill="F2F2F2"/>' : ''}<w:vAlign w:val="center"/></w:tcPr>${sub.join('')}</w:tc>`);
+        out.push(`<w:tc><w:tcPr><w:tcW w:w="${w0}" w:type="dxa"/>${span > 1 ? `<w:gridSpan w:val="${span}"/>` : ''}${fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>` : ''}<w:vAlign w:val="center"/></w:tcPr>${sub.join('')}</w:tc>`);
       });
       for (; used < ncol; used++) out.push(`<w:tc><w:tcPr><w:tcW w:w="${widths[used]}" w:type="dxa"/></w:tcPr><w:p><w:pPr><w:pStyle w:val="TableText"/></w:pPr></w:p></w:tc>`);
       out.push('</w:tr>');
@@ -54413,6 +54431,103 @@ ${x52PyBlock('APP', APP)}
     mine.forEach(x => x[2] = 1);
     Q51_NEWS.unshift(['5.6', 'October 2026', mine]);
   } catch (e) { console.error('v5.6 news', e); }
+})();
+
+</script>
+<script id="x63-layer">
+/* =====================================================================
+   v5.6 fixes (layer x63), from Perry's checks of 26 Oct: everything the
+   tabs show goes into the Full Report. Forecasting mode: Causality,
+   Patterns, Results computed in Python, Importance by Criterion, the Test
+   Set forecasts against the random walk and the forecasts beyond the
+   sample; the multi-class Full Report gets the same contents as the
+   two-class one. Figures and sections are numbered again at the end.
+   ===================================================================== */
+function q63Num(h) {
+  let s = 0, f = 0;
+  h = h.replace(/<h2>(?:\d+\.\s*)?(?!Appendix)([^<]*)<\/h2>/g, (m, t) => `<h2>${++s}. ${t}</h2>`);
+  h = h.replace(/<b>Figure (?:\d+)?\.<\/b>/g, () => `<b>Figure ${++f}.</b>`);
+  return h;
+}
+function q63Insert(h, beforeTitleRe, add) {
+  if (!add) return h;
+  const re = new RegExp(`<h2>(?:\\d+\\.\\s*)?${beforeTitleRe}`), m = h.match(re);
+  return m ? h.slice(0, m.index) + add + h.slice(m.index) : h + add;
+}
+function q63FigX(id, cap) { try { return v41Fig(id, cap, { n: 0 }); } catch (e) { return ''; } }
+/* the sections of the Results and Methods reports that the Full Report did not take */
+function q63Extra() {
+  let R = {}, M = {};
+  try { R = v41Sections(buildResultsReport()); } catch (e) { console.error(e); }
+  try { M = v41Sections(buildMethodsReport()); } catch (e) { console.error(e); }
+  let h = '';
+  if (R['patterns']) h += `<h2>Patterns: groups and components</h2>` + (M['patterns'] || '') + v41Strip(R['patterns']);
+  if (R['causality']) h += `<h2>Causality</h2>` + (M['causality'] || '') + v41Strip(R['causality']);
+  if (R['results computed in python']) h += `<h2>Results computed in Python</h2>` + v41Strip(R['results computed in python']);
+  return h;
+}
+function q63ForecastBits() {
+  let h = '';
+  h += q63FigX('fcChart', 'Test Set forecasts against the random walk (next value = last value).');
+  try { if (v41Visible('liveFcCard')) { const g = v41Grab('liveFcOutput'); if (g && g.replace(/<[^>]+>/g, '').trim()) h += `<h3>Forecasts beyond the sample</h3>` + g; } } catch (e) {}
+  return h;
+}
+/* ---------- the multi-class Full Report ---------- */
+function q63McOverview(run) {
+  const r = run.results[+run.sel] || run.results[0], m = r.mVa || {}, k = run.S.k, tgt = (globalState && globalState.targetName) || ((document.getElementById('targetSelect') || {}).value) || 'the target';
+  const pct = v => Number.isFinite(v) ? (100 * v).toFixed(1) + '%' : '–';
+  const base = run.bench && run.bench.majority;
+  return `<p>This report documents a multi-class classification of <b>${v41Esc(tgt)}</b> (${k} classes) on the dataset <b>${v41Esc(currentDatasetFileName || 'unspecified')}</b> with <b>${v41Esc(r.label || r.key)}</b>, trained on ${run.S.trainRows ? run.S.trainRows.length : '?'} rows and tested once on ${run.S.valRows ? run.S.valRows.length : '?'} rows it never saw. On the Test Set the model reaches an accuracy of <b>${pct(m.acc)}</b>, a balanced accuracy of ${pct(m.bal)} and a macro F1 of ${Number.isFinite(m.f1M) ? m.f1M.toFixed(3) : '–'}${base && Number.isFinite(base.acc) ? `, against ${pct(base.acc)} for always predicting the largest class` : ''}. The sections follow the analysis from the data to the model, its errors, what drives its predictions, and its limitations.</p>`;
+}
+function q63McFull() {
+  const run = X48.lastRun; if (!run) return '';
+  const X = v41Sections(x48Report('full')), num = { n: 0 };
+  let h = x48ReportHeader('Full Analysis Report');
+  h += `<h2>Overview</h2>` + q63McOverview(run);
+  let sn = 2;
+  try { h += v41DataSection('forecast', num, sn++); } catch (e) { console.error('q63 data', e); }
+  try { const ts = (typeof w44IsCore === 'function' && w44IsCore()) ? '' : v41TsSection(num, sn); if (ts) { h += ts; sn++; } } catch (e) { console.error('q63 ts', e); }
+  h += `<h2>Preprocessing and evaluation design</h2><p>Every preprocessing step (missing values, outliers, scaling, the encoding of categories) was fitted on the training set only and then applied unchanged to the Test Set (and to any new data), so no information from the Test Set entered the model. The hyperparameters were chosen by cross-validation on the training set; the Test Set was used once, at the end.</p>` + (X['settings of this run'] ? `<h3>Settings of this run</h3>` + X['settings of this run'] : '');
+  ['methods', 'predictive performance', 'diagnostics'].forEach(k => { if (X[k]) h += `<h2>${k.charAt(0).toUpperCase() + k.slice(1)}</h2>` + X[k]; });
+  h += q63ForecastBits();
+  h += q63FigX('learningCurveChart', 'Learning curve: training and cross-validation scores as the training sample grows; the Test Set is not used.');
+  const bootK = Object.keys(X).find(k => /^bootstrap/.test(k)); if (bootK) h += `<h2>Bootstrap confidence intervals</h2>` + X[bootK];
+  let it = X['interpretation'] || '';
+  if (!/x48PdpChart|Partial dependence/.test(it)) it += q63FigX('x48PdpChart', `Partial dependence and ICE of the probability of one class.`);
+  it = q63FigX('v45ImpChart', 'Importance of each predictor by several criteria.') + it;
+  if (it.replace(/<[^>]+>/g, '').trim() || /<img/.test(it)) h += `<h2>Interpretation: what drives the predictions</h2>` + it;
+  h += q63Extra();
+  try {
+    if (v41Visible('oosMetricsCard') || v41Visible('oosTableCard') || v41Visible('oosChartCard')) {
+      h += `<h2>Forecasts for new data</h2>`;
+      const sm = v41Grab('oosModelSummary'); if (sm) h += `<h3>Model used</h3>` + sm;
+      if (v41Visible('oosMetricsCard')) h += `<h3>Accuracy on the new data</h3>` + v41Grab('oosMetricsOutput');
+      h += q63FigX('oosChart', 'Forecasts for the uploaded data.');
+      if (v41Visible('oosTableCard')) h += `<h3>Forecast table</h3>` + v41Grab('oosTableOutput');
+    }
+  } catch (e) {}
+  try { if (V41.runs.length && !w44IsCore()) h += `<h2>Run history and comparison</h2>` + v41Strip(v41RunHistoryTable(true)); } catch (e) {}
+  try { h += `<h2>Methodology checklist</h2>` + v41ChecklistHTML('forecast', true); } catch (e) {}
+  h += `<h2>How to read these results</h2><p><b>Accuracy</b> is the share of Test Set rows predicted correctly; compare it with always predicting the largest class. <b>Balanced accuracy</b> and <b>macro F1</b> give every class the same weight, so a model that ignores a small class scores low on them even when its accuracy looks good. In the <b>confusion matrices</b> the rows are the actual classes and the columns the predicted ones: the diagonal holds the correct predictions, the other cells show which class each one is mistaken for. <b>Precision</b> of a class: of the rows predicted as that class, the share that really are; <b>recall</b>: of the rows of that class, the share found. The <b>ROC curves</b> compare each class with all the others (one against the rest): an AUC of 0.5 is chance, 1 is perfect. The <b>calibration</b> chart shows whether a predicted probability of, say, 70% comes true about 70% of the time.</p>`;
+  h += `<h2>Limitations of this analysis</h2><p>The Test Set is one split of the data: with ${run.S.valRows ? run.S.valRows.length : 'few'} rows its metrics carry sampling error (see the bootstrap intervals when they were computed), and classes with few Test Set rows have unreliable per-class metrics. The model learns associations, not causes: importance and partial dependence describe the model, not the world. Results apply to data like those used; a change in the population or the period can make them obsolete.</p>`;
+  if (X['references']) h += `<h2>References</h2>` + X['references'];
+  try { const pv = v41Grab('x48PredCardBody'); if (pv && /<table/.test(pv)) h += `<h2>Appendix. Test Set predictions</h2>` + pv; } catch (e) {}
+  return q63Num(h);
+}
+(function () {
+  try {
+    const oF = v41FullReportForecast;
+    v41FullReportForecast = function () {
+      if (typeof globalState !== 'undefined' && globalState && globalState.x48mc && typeof X48 !== 'undefined' && X48.lastRun) { try { return q63McFull(); } catch (e) { console.error('q63 multi-class report', e); return oF.apply(this, arguments); } }
+      let h = oF.apply(this, arguments);
+      try {
+        h = q63Insert(h, 'Diagnostics', q63ForecastBits());
+        h = q63Insert(h, 'Run history|Methodology checklist', q63Extra());
+        h = q63Num(h);
+      } catch (e) { console.error('q63 full report', e); }
+      return h;
+    };
+  } catch (e) { console.error('q63 hooks', e); }
 })();
 
 </script>
