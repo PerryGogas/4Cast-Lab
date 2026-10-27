@@ -55239,5 +55239,322 @@ function q64PyInsert(r) {
 })();
 
 </script>
+<style id="x66-style">
+/* Compare the lags (layer x66) */
+#q66CmpBtn { margin-left:0; }
+.q66 { margin-top:12px; }
+.q66 .q66-head { margin-bottom:6px; font-size:13px; }
+.q66 .q66-head .feat-hint { display:inline; }
+.q66 .q66-tbl { max-height:430px; overflow:auto; }
+.q66 table.q66-t td, .q66 table.q66-t th { padding:4px 8px; font-size:12.5px; white-space:nowrap; text-align:right; }
+.q66 table.q66-t td:nth-child(2), .q66 table.q66-t th:nth-child(2), .q66 table.q66-t td:first-child, .q66 table.q66-t th:first-child { text-align:left; }
+.q66 table.q66-t tbody tr { cursor:pointer; }
+.q66 table.q66-t tbody tr:hover td { background:rgba(var(--v462-good-rgb, 14,165,233), .08); }
+.q66 table.q66-t tr.q66-crit td { background:rgba(var(--v462-good-rgb, 14,165,233), .10); }
+.q66 table.q66-t tr.q66-pick td { background:rgba(var(--v462-good-rgb, 14,165,233), .26); }
+.q66 td.q66-best { font-weight:700; }
+.q66 td.q66-lbbad { color:#b45309; }
+.q66 .q66-sel { margin:8px 0; font-size:13px; }
+.q66 .q66-det { margin-top:8px; border:1px solid var(--border-soft); border-radius:10px; padding:10px 12px; }
+.q66 .q66-dh { font-weight:700; font-size:13px; margin-bottom:4px; }
+.q66 .q66-eq { font-family:'Cambria Math', Cambria, Georgia, serif; font-size:15px; margin:6px 0 8px; overflow-x:auto; white-space:nowrap; }
+.q66 table.q66-ct td, .q66 table.q66-ct th { padding:3px 10px; font-size:12.5px; text-align:right; }
+.q66 table.q66-ct td:first-child, .q66 table.q66-ct th:first-child { text-align:left; }
+
+</style>
+<script id="x66-layer">
+/* =====================================================================
+   v5.7 (layer x66), Perry 27 Oct 2026: "I must be able to see first: the
+   selected variables; the statistics BIC AIC R2 etc of the autoregression".
+   Data tab > Variable Construction > Lag > Number of lags of the target
+   (BIC / AIC / CV): a Compare the lags button shows, before anything is
+   added, every autoregression from 1 to Max lags with n, k, R2, adjusted
+   R2, AIC, BIC, HQ, RMSE and the Ljung-Box test of its residuals, and the
+   chosen one with its coefficients and equation. A click on a row chooses
+   another number of lags; + Add Variable(s) then adds exactly those.
+   Same rows as the automatic choice: training rows only, common sample.
+   ===================================================================== */
+const Q66 = { cmp: null };
+function q66Esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+/* what the comparison depends on: it is used by + Add Variable(s) only while all of this is unchanged */
+function q66Sig() {
+  let hz = { h: 0, includeYt: false }; try { hz = horizonSettings(); } catch (e) {}
+  const tgt = q52Target();
+  let yh = '';
+  try { const n = rawData.length; yh = [n, rawData[0] && rawData[0][tgt], rawData[n - 1] && rawData[n - 1][tgt], rawData[n >> 1] && rawData[n >> 1][tgt]].join('|'); } catch (e) {}
+  return JSON.stringify({ tgt, mode: Q52.lag.mode, max: Q52.lag.max, seas: !!Q52.lag.seas, h: hz.h, yt: !!hz.includeYt, ratio: (document.getElementById('trainRatio') || {}).value, algo: Q52.lag.mode === 'cv' ? (document.getElementById('algorithmSelect') || {}).value : '', yh,
+    unit: (typeof v48PanelActive === 'function' && v48PanelActive()) ? V48.panel.unit : '' });
+}
+/* every autoregression on the common sample: the same rows, one Cholesky factor of the nested regressors */
+function q66Fit(S, sets) {
+  const { y, at, tv, cut, hz } = S;
+  const h = hz.h, useYt = hz.includeYt && h > 0;
+  const lagsAll = sets[sets.length - 1].lags;
+  const seasonal = sets[0].lags.filter(k => k > sets[0].p);
+  const order = seasonal.concat(lagsAll.filter(k => seasonal.indexOf(k) < 0));
+  const rows = [];
+  for (let i = 0; i < y.length; i++) {
+    const it = h > 0 ? at(i, h) : i; if (it < 0) continue;
+    if (!(tv[it] <= cut)) continue;
+    const yy = y[it]; if (!Number.isFinite(yy)) continue;
+    const x = [];
+    if (useYt) { if (!Number.isFinite(y[i])) continue; x.push(y[i]); }
+    let ok = true;
+    for (const k of order) { const j = at(i, -k); if (j < 0 || !Number.isFinite(y[j])) { ok = false; break; } x.push(y[j]); }
+    if (!ok) continue;
+    rows.push({ i, it, yv: yy, x });
+  }
+  const n = rows.length, base = useYt ? 1 : 0, K = base + order.length;
+  if (n < K + 5) return { err: `Too few training rows (${n}) for ${Math.max(...lagsAll)} lags: lower Max lags.` };
+  const my = rows.reduce((a, r) => a + r.yv, 0) / n;
+  const mx = new Float64Array(K); rows.forEach(r => { for (let j = 0; j < K; j++) mx[j] += r.x[j]; }); for (let j = 0; j < K; j++) mx[j] /= n;
+  const G = Array.from({ length: K }, () => new Float64Array(K)), b = new Float64Array(K); let sst = 0;
+  rows.forEach(r => { const d0 = r.yv - my; sst += d0 * d0; const dx = r.x.map((v, j) => v - mx[j]); for (let a = 0; a < K; a++) { b[a] += dx[a] * d0; const Ga = G[a]; for (let c = a; c < K; c++) Ga[c] += dx[a] * dx[c]; } });
+  for (let a = 0; a < K; a++) for (let c = 0; c < a; c++) G[a][c] = G[c][a];
+  const L = Array.from({ length: K }, () => new Float64Array(K)), z = new Float64Array(K);
+  const ssrAt = new Array(K + 1); ssrAt[0] = sst;
+  let ssr = sst, stopAt = K;
+  for (let i = 0; i < K; i++) {
+    for (let j = 0; j <= i; j++) {
+      let s = G[i][j]; for (let k = 0; k < j; k++) s -= L[i][k] * L[j][k];
+      if (i === j) { if (!(s > 1e-10 * Math.max(1, G[i][i]))) { stopAt = i; break; } L[i][i] = Math.sqrt(s); } else L[i][j] = s / L[j][j];
+    }
+    if (stopAt !== K) break;
+    let s = b[i]; for (let k = 0; k < i; k++) s -= L[i][k] * z[k]; z[i] = s / L[i][i];
+    ssr -= z[i] * z[i]; ssrAt[i + 1] = Math.max(ssr, 1e-300);
+  }
+  // the regression of the first m regressors (in "order"): coefficients, standard errors, residuals
+  const names = (useYt ? [`${S.tgt} (t)`] : []).concat(order.map(k => derivedName('lag', S.tgt, k)));
+  const solve = m => {
+    const beta = new Float64Array(m);
+    for (let i = m - 1; i >= 0; i--) { let s = z[i]; for (let k = i + 1; k < m; k++) s -= L[k][i] * beta[k]; beta[i] = s / L[i][i]; }
+    // inverse of L (lower), then (X'X)^-1 = L^-T L^-1 of the centred regressors
+    const Li = Array.from({ length: m }, () => new Float64Array(m));
+    for (let i = 0; i < m; i++) { Li[i][i] = 1 / L[i][i]; for (let j = 0; j < i; j++) { let s = 0; for (let k = j; k < i; k++) s -= L[i][k] * Li[k][j]; Li[i][j] = s / L[i][i]; } }
+    const V = Array.from({ length: m }, () => new Float64Array(m));
+    for (let a = 0; a < m; a++) for (let c = a; c < m; c++) { let s = 0; for (let k = Math.max(a, c); k < m; k++) s += Li[k][a] * Li[k][c]; V[a][c] = V[c][a] = s; }
+    let a0 = my; for (let j = 0; j < m; j++) a0 -= beta[j] * mx[j];
+    const res = rows.map(r => { let f = a0; for (let j = 0; j < m; j++) f += beta[j] * r.x[j]; return r.yv - f; });
+    let va = 1 / n; for (let a = 0; a < m; a++) for (let c = 0; c < m; c++) va += mx[a] * V[a][c] * mx[c];
+    return { beta, a0, V, va, res };
+  };
+  // Ljung-Box on the residuals, in time order (within each unit; a pair needs both dates in the sample)
+  const posOf = new Map(rows.map((r, k) => [r.i, k]));
+  const lbLags = 12;
+  const ljung = res => {
+    if (n < 3 * lbLags) return { q: NaN, p: NaN };
+    const mean = res.reduce((a, v) => a + v, 0) / n;
+    const d = res.map(v => v - mean), den = d.reduce((a, v) => a + v * v, 0);
+    let q = 0;
+    for (let k = 1; k <= lbLags; k++) {
+      let s = 0;
+      rows.forEach((r, j) => { const pi = at(r.i, -k); if (pi < 0) return; const pj = posOf.get(pi); if (pj !== undefined) s += d[j] * d[pj]; });
+      const rk = s / den; q += rk * rk / (n - k);
+    }
+    q *= n * (n + 2);
+    return { q, p: chi2SF(q, lbLags) };
+  };
+  const heavy = n * K * K / 2 > 2e8;
+  const res = sets.map(st => {
+    const nonSeas = st.lags.filter(v => seasonal.indexOf(v) < 0).length;
+    const m = base + seasonal.length + nonSeas, k = base + st.lags.length, q = k + 1;
+    if (m > stopAt) return Object.assign({}, st, { na: true });
+    const S2 = ssrAt[m];
+    const s2 = S2 / n;
+    const o = Object.assign({}, st, { m, k: q, n, ssr: S2, r2: 1 - S2 / sst, ar2: 1 - (S2 / (n - q)) / (sst / (n - 1)),
+      aic: n * Math.log(s2) + 2 * q, bic: n * Math.log(s2) + q * Math.log(n), hq: n * Math.log(s2) + 2 * q * Math.log(Math.log(n)), rmse: Math.sqrt(s2) });
+    if (!heavy) { const f = solve(m); o.lb = ljung(f.res); }
+    return o;
+  });
+  return { res, n, sst, names, order, base, useYt, solve, ljung, collinearFrom: stopAt < K ? stopAt : null, h, tgt: S.tgt };
+}
+/* the chosen autoregression in full */
+function q66Detail(F, st) {
+  const f = F.solve(st.m), df = st.n - st.k, s2 = st.ssr / df;
+  const terms = [{ name: 'const', b: f.a0, se: Math.sqrt(s2 * f.va) }];
+  for (let j = 0; j < st.m; j++) terms.push({ name: F.names[j], b: f.beta[j], se: Math.sqrt(s2 * f.V[j][j]) });
+  terms.forEach(t => { t.t = t.b / t.se; t.p = tTwoSidedP(t.t, df); });
+  const lb = st.lb || F.ljung(f.res);
+  return { terms, df, s: Math.sqrt(s2), lb };
+}
+async function q66Compute() {
+  const P = tfParams('lag'); if (P.error) return { err: P.error };
+  const S = q52Series(); if (S.err) return { err: S.err };
+  const F0 = q52Freq();
+  const maxL = Q52.lag.max, mode = Q52.lag.mode;
+  const seas = Q52.lag.seas && F0 ? F0.seas : [];
+  const sets = q52LagSets(maxL, seas, mode === 'cv');
+  const F = q66Fit(S, sets);
+  if (F.err) return { err: F.err };
+  let CV = null;
+  if (mode === 'cv') {
+    const sets2 = q52LagSets(maxL, seas, true), out = { prog: 0 };
+    v41JobStart('lagcv');
+    showProgress('Number of lags by CV', `Trying ${sets2.length} numbers of lags…`, 2);
+    const tick = setInterval(() => { try { showProgress('Number of lags by CV', `Trying ${sets2.length} numbers of lags with the selected model…`, Math.round(2 + 96 * out.prog)); } catch (e) {} }, 400);
+    try { CV = await q50Run(q52LagCvG(S, sets2, out)); }
+    catch (e) { clearInterval(tick); hideProgress(); v41JobEnd(q50IsStop(e)); if (q50IsStop(e)) return { stopped: true }; return { err: 'The lags could not be chosen by CV: ' + (e && e.message ? e.message : e) }; }
+    clearInterval(tick); hideProgress(); v41JobEnd(false);
+    if (!CV || CV.err) return { err: (CV && CV.err) || 'The lags could not be chosen by CV.' };
+    F.res.forEach(st => { const c = CV.res.find(x => x.p === st.p); if (c) { st.cv = c.cv; st.cvSe = c.cvSe; } });
+  }
+  let best = null;
+  F.res.forEach(st => {
+    if (st.na) return;
+    const v = mode === 'cv' ? st.cv : st[mode]; if (!Number.isFinite(v)) return;
+    if (!best) { best = st; return; }
+    const bv = mode === 'cv' ? best.cv : best[mode];
+    if (mode === 'cv' ? (CV.higher ? v > bv : v < bv) : v < bv) best = st;
+  });
+  if (!best) return { err: 'No number of lags could be scored: lower Max lags.' };
+  return { F, CV, mode, best, pick: best, sig: q66Sig(), tgt: S.tgt, maxL, seas, at: Date.now() };
+}
+/* ---------- the table ---------- */
+function q66Fmt(v, d) { return Number.isFinite(v) ? (Math.abs(v) >= 1e4 ? v.toFixed(1) : v.toFixed(d === undefined ? 4 : d)) : '–'; }
+function q66LagsTxt(F, st) {
+  const L = st.lags, pre = F.useYt ? 'y(t), ' : '';
+  const run = L.filter(k => k <= st.p).length === st.p ? (st.p === 1 ? 'lag 1' : `lags 1–${st.p}`) : L.join(', ');
+  const ex = L.filter(k => k > st.p);
+  return pre + run + (ex.length ? ` + ${ex.join(', ')}` : '');
+}
+function q66CritName(mode, C) { return mode === 'cv' ? `CV ${C.CV && C.CV.key ? C.CV.key.toUpperCase() : ''}` : (mode === 'bic' ? 'BIC (SIC)' : 'AIC'); }
+function q66TableHTML(C, forReport) {
+  const F = C.F, rows = F.res.filter(st => !st.na), mode = C.mode;
+  const cols = [['r2', 'R²', 1], ['ar2', 'Adj. R²', 1], ['aic', 'AIC', -1], ['bic', 'BIC (SIC)', -1], ['hq', 'HQ', -1], ['rmse', 'RMSE', -1]];
+  if (mode === 'cv') cols.push(['cv', `CV ${q66Esc((C.CV.key || '').toUpperCase())}`, C.CV.higher ? 1 : -1]);
+  const bestOf = {};
+  cols.forEach(([k, , dir]) => { let bv = null; rows.forEach(st => { const v = st[k]; if (Number.isFinite(v) && (bv === null || (dir > 0 ? v > bv : v < bv))) bv = v; }); bestOf[k] = bv; });
+  const hasLb = rows.some(st => st.lb && Number.isFinite(st.lb.p));
+  const tgtName = q66Esc(C.tgt) + (F.h > 0 ? ` (t+${F.h})` : '');
+  let h = `<div class="table-container ${forReport ? '' : 'v41-nosort q66-tbl'}"><table class="metrics-table q66-t"><thead><tr><th>p</th><th>Predictors of ${tgtName}</th><th>n</th><th>k</th>${cols.map(c => `<th>${c[1]}</th>`).join('')}${mode === 'cv' ? '<th>± SE</th>' : ''}${hasLb ? '<th title="Ljung-Box test of the residuals, 12 lags: a small p-value means serial correlation is left in the residuals (more lags may be needed)">Ljung-Box p (12)</th>' : ''}</tr></thead><tbody>`;
+  rows.forEach(st => {
+    const isBest = st === C.best, isPick = st === C.pick;
+    h += `<tr data-p="${st.p}" class="${isPick ? 'q66-pick' : ''}${isBest ? ' q66-crit' : ''}"><td><b>${st.p}</b>${isPick ? (isBest ? ' ◀ chosen' : ' ◀ your choice') : (isBest && !forReport ? ` <small>(${q66Esc(q66CritName(mode, C))})</small>` : '')}</td><td>${q66Esc(q66LagsTxt(F, st))}</td><td>${st.n}</td><td>${st.k}</td>` +
+      cols.map(([k]) => `<td class="${Number.isFinite(st[k]) && st[k] === bestOf[k] ? 'q66-best' : ''}">${q66Fmt(st[k], k === 'r2' || k === 'ar2' ? 4 : undefined)}</td>`).join('') +
+      (mode === 'cv' ? `<td>${q66Fmt(st.cvSe)}</td>` : '') +
+      (hasLb ? `<td class="${st.lb && st.lb.p < 0.05 ? 'q66-lbbad' : ''}">${st.lb ? q66Fmt(st.lb.p, 3) : '–'}</td>` : '') + `</tr>`;
+  });
+  h += `</tbody></table></div>`;
+  return h;
+}
+function q66DetailHTML(C, forReport) {
+  const F = C.F, st = C.pick, D = q66Detail(F, st);
+  const yname = `${q66Esc(C.tgt)}${F.h > 0 ? `<sub>t+${F.h}</sub>` : '<sub>t</sub>'}`;
+  const tn = nm => { const m = String(nm).match(/^(.*)_lag(\d+)$/); if (m && m[1] === C.tgt) return `${q66Esc(C.tgt)}<sub>t−${m[2]}</sub>`; if (nm === `${C.tgt} (t)`) return `${q66Esc(C.tgt)}<sub>t</sub>`; return q66Esc(nm); };
+  const num = v => (Math.abs(v) >= 1e4 || (Math.abs(v) < 1e-3 && v !== 0)) ? v.toExponential(3) : v.toFixed(4);
+  let eq = `${yname} = ${num(D.terms[0].b)}`;
+  D.terms.slice(1).forEach(t => { eq += ` ${t.b < 0 ? '−' : '+'} ${num(Math.abs(t.b))}·${tn(t.name)}`; });
+  eq += ' + ε';
+  const stars = p => p < 0.01 ? '***' : p < 0.05 ? '**' : p < 0.1 ? '*' : '';
+  let h = `<div class="q66-det"><div class="q66-dh">The ${st === C.best ? 'chosen' : 'selected'} autoregression: ${st.p} lag${st.p === 1 ? '' : 's'}${F.useYt ? ' and the current value' : ''}</div>
+    <div class="q66-eq">${eq}</div>
+    <div class="table-container ${forReport ? '' : 'v41-nosort'}"><table class="metrics-table q66-ct"><thead><tr><th>Term</th><th>Coefficient</th><th>Std. error</th><th>t</th><th>p-value</th></tr></thead><tbody>` +
+    D.terms.map(t => `<tr><td>${t.name === 'const' ? 'Constant' : q66Esc(t.name)}</td><td>${num(t.b)}${stars(t.p)}</td><td>${num(t.se)}</td><td>${Number.isFinite(t.t) ? t.t.toFixed(2) : '–'}</td><td>${Number.isFinite(t.p) ? (t.p < 0.0001 ? '<0.0001' : t.p.toFixed(4)) : '–'}</td></tr>`).join('') +
+    `</tbody></table></div>
+    <div class="feat-hint">OLS with a constant on ${st.n.toLocaleString()} training rows (the Test Set is not used); residual standard error ${num(D.s)} on ${D.df} degrees of freedom; R² ${st.r2.toFixed(4)}, adjusted R² ${st.ar2.toFixed(4)}; Ljung-Box (12 lags) ${Number.isFinite(D.lb.q) ? `Q = ${D.lb.q.toFixed(2)}, p = ${D.lb.p.toFixed(3)}${D.lb.p < 0.05 ? ': serial correlation is left in the residuals' : ': no serial correlation left'}` : 'not computed (too few rows)'}.${F.h > 1 ? ` With a horizon of ${F.h} the forecast errors of neighbouring rows overlap, so the residuals are autocorrelated up to lag ${F.h - 1} by construction and the Ljung-Box test rejects even for a good model.` : ''} * p &lt; 0.1, ** p &lt; 0.05, *** p &lt; 0.01.</div></div>`;
+  return h;
+}
+function q66Render(added) {
+  const C = Q66.cmp; let box = document.getElementById('q66Cmp');
+  if (!box) {
+    const btn = document.querySelector('button[onclick="addDerivedVariable()"]'); if (!btn) return;
+    box = document.createElement('div'); box.id = 'q66Cmp'; box.className = 'q66';
+    btn.parentNode.insertAdjacentElement('afterend', box);
+  }
+  if (!C) { box.innerHTML = ''; return; }
+  const F = C.F, mode = C.mode;
+  const pickNames = (F.useYt ? [`${C.tgt} (t)`] : []).concat(C.pick.lags.map(k => derivedName('lag', C.tgt, k)));
+  box.innerHTML = `<div class="q66-head"><b>Autoregressions of ${q66Esc(C.tgt)}${F.h > 0 ? ` (t+${F.h})` : ''}, 1 to ${C.maxL} lags</b> <span class="feat-hint">on the same ${F.n.toLocaleString()} training rows; the row chosen by ${q66Esc(q66CritName(mode, C))} is highlighted, the best value of each column in bold. ${added ? '' : '<b>Click a row</b> to choose another number of lags.'}</span></div>
+    ${q66TableHTML(C, false)}
+    <div class="q66-sel">${added ? 'Added and ticked' : 'Will be added when you click <b>+ Add Variable(s)</b>'}: <b>${pickNames.map(q66Esc).join(', ')}</b>${F.useYt ? ` <small>(${q66Esc(C.tgt)} (t) is the current value, already used as a predictor through "Use the current value y(t) as a predictor")</small>` : ''}.${F.collinearFrom ? ' Longer lags were left out: they are combinations of the shorter ones.' : ''}</div>
+    ${q66DetailHTML(C, false)}`;
+  box.querySelectorAll('tr[data-p]').forEach(tr => tr.onclick = () => {
+    const st = C.F.res.find(x => x.p === +tr.dataset.p); if (!st || st.na) return;
+    C.pick = st; q66Render(false); q66Preview();
+  });
+}
+function q66Preview() {
+  const prev = document.getElementById('tfPreviewName'), C = Q66.cmp;
+  if (!prev || !C || C.sig !== q66Sig()) return;
+  prev.innerHTML = `lags ${q66Esc(C.pick.lags.join(', '))} of <span style="font-family:monospace;">${q66Esc(C.tgt)}</span> (${C.pick === C.best ? `chosen by ${q66Esc(q66CritName(C.mode, C))}` : 'your choice in the comparison'})`;
+}
+async function q66Compare() {
+  const C = await q66Compute();
+  if (C.stopped) return;
+  if (C.err) { showValidationBanner(C.err); return; }
+  Q66.cmp = C; q66Render(false); q66Preview();
+  try { document.getElementById('q66Cmp').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
+}
+function q66Buttons() {
+  const btn = document.querySelector('button[onclick="addDerivedVariable()"]'); if (!btn) return;
+  let c = document.getElementById('q66CmpBtn');
+  if (!c) { c = document.createElement('button'); c.id = 'q66CmpBtn'; c.type = 'button'; c.className = 'btn-secondary'; c.textContent = 'Compare the lags'; c.title = 'Show every autoregression from 1 to Max lags (R², AIC, BIC, HQ, RMSE, Ljung-Box) and the chosen one, before adding anything'; c.onclick = () => q66Compare(); btn.insertAdjacentElement('afterend', c); }
+  const type = (document.getElementById('tfType') || {}).value;
+  const on = type === 'lag' && Q52.lag.mode !== 'fixed';
+  c.style.display = on ? '' : 'none';
+  const box = document.getElementById('q66Cmp');
+  if (box) box.style.display = type === 'lag' ? '' : 'none';
+  if (Q66.cmp && Q66.cmp.sig !== q66Sig() && box && box.innerHTML && !Q66.cmp.added) { Q66.cmp = null; box.innerHTML = '<div class="feat-hint">The settings or the data changed: click <b>Compare the lags</b> again.</div>'; }
+}
+/* + Add Variable(s): the comparison's choice when it is still valid, otherwise as before (and the full table after) */
+(function () {
+  try {
+    q52LagChoose = async function (addFn) {
+      let C = Q66.cmp && Q66.cmp.sig === q66Sig() && !Q66.cmp.added ? Q66.cmp : null;
+      if (!C) { C = await q66Compute(); if (C.stopped) return; if (C.err) { showValidationBanner(C.err); return; } }
+      const best = C.pick, S = { tgt: C.tgt };
+      Q52.lag.last = { mode: C.mode, R: { res: C.F.res, n: C.F.n, key: C.CV && C.CV.key, higher: C.CV && C.CV.higher, algo: C.CV && C.CV.algo, collinearFrom: C.F.collinearFrom }, best, maxL: C.maxL, seas: C.seas, tgt: C.tgt, at: Date.now(), cmp: C };
+      const prevSrc = new Set(tfSrcChecked);
+      tfSrcChecked.clear(); tfSrcChecked.add(S.tgt);
+      Q52.autoList = best.lags.slice();
+      try { addFn(); } finally { Q52.autoList = null; tfSrcChecked.clear(); prevSrc.forEach(v => tfSrcChecked.add(v)); }
+      const chosen = new Set(best.lags.map(k => derivedName('lag', S.tgt, k)));
+      const unt = [];
+      setTimeout(() => {
+        document.querySelectorAll('.feature-checkbox').forEach(cb => {
+          const sp = derivedSpecOf(cb.value);
+          if (!sp || sp.type !== 'lag' || sp.src !== S.tgt) return;
+          const want = chosen.has(cb.value);
+          if (cb.checked !== want) { cb.checked = want; try { featureChecksKnown.set(cb.value, want); } catch (e) {} if (!want) unt.push(cb.value); }
+        });
+        try { updateSelectedCountDisplay(); onFeatureSelectionChanged(); } catch (e) {}
+        C.added = true; Q66.cmp = C;
+        q52LagResult(unt);
+        q66Render(true);
+        try { v41SetDirty(true); } catch (e) {}
+      }, 250);
+    };
+    const oT = onTransformTypeChange;
+    onTransformTypeChange = function () { const r = oT.apply(this, arguments); try { q66Buttons(); q66Preview(); } catch (e) { console.error('q66 buttons', e); } return r; };
+    window.addEventListener('load', () => setTimeout(() => { try { q66Buttons(); } catch (e) {} }, 1800));
+    // the reports: the comparison and the chosen autoregression, when its lags are in the model of the run
+    const lagSec = () => {
+      const L = Q52.lag.last; if (!L || !L.cmp) return '';
+      const st = globalState; const feats = (st && (st.featureNames || st.features || (st.v45raw && st.v45raw.features))) || [];
+      const names = L.best.lags.map(k => derivedName('lag', L.tgt, k));
+      if (feats.length && !names.some(n => feats.indexOf(n) >= 0)) return '';
+      const C = L.cmp;
+      return `<h2>Number of lags of the target</h2><p>The lags of ${q66Esc(C.tgt)} were chosen by ${q66Esc(q66CritName(C.mode, C))}${C.pick !== C.best ? ` (the criterion chose ${C.best.p}; ${C.pick.p} was chosen by hand from the comparison)` : ''}, comparing the autoregressions with 1 to ${C.maxL} lags by OLS on the same ${C.F.n.toLocaleString()} training rows (the Test Set was not used). Lags used: ${q66Esc(names.join(', '))}.</p>` + q66TableHTML(C, true) + q66DetailHTML(C, true);
+    };
+    const oM = buildMethodsReport;
+    buildMethodsReport = function () {
+      const r = oM.apply(this, arguments);
+      try { const s = lagSec(); if (s && typeof r === 'string') { const i = r.lastIndexOf('<h2>Data sources'); const j = i >= 0 ? i : r.lastIndexOf('</body>'); return j > 0 ? r.slice(0, j) + s + r.slice(j) : r + s; } } catch (e) { console.error('q66 methods', e); }
+      return r;
+    };
+    const oF = v41FullReportForecast;
+    v41FullReportForecast = function () {
+      let h = oF.apply(this, arguments);
+      try { const s = lagSec(); if (s && typeof h === 'string') { h = q63Insert(h, 'Methods', s); h = q63Num(h); } } catch (e) { console.error('q66 full', e); }
+      return h;
+    };
+    // What's new (v5.7)
+    const cur = Q51_NEWS[0][2];
+    cur.push(['<b>Compare the lags</b> (Data tab, Variable Construction, Lag): every autoregression from 1 to Max lags with R², adjusted R², AIC, BIC, HQ, RMSE and the Ljung-Box test, and the chosen one with its coefficients, before anything is added; click a row to choose another number of lags.', 'lagcmp', 1]);
+    Q51_SHOW.lagcmp = () => { try { showTab('tabData'); } catch (e) {} setTimeout(() => { try { const t = document.getElementById('tfType'); t.value = 'lag'; onTransformTypeChange(); q51Flash('#tfLagBox'); } catch (e) {} }, 300); };
+  } catch (e) { console.error('q66 hooks', e); }
+})();
+
+</script>
 </body>
 </html>
