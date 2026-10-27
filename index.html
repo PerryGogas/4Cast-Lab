@@ -10942,8 +10942,8 @@ function renderCorrelationPanel() {
   out.innerHTML = h;
   if (rankBox) {
     let k = parseInt((document.getElementById('corrTopK') || {}).value, 10); if (!Number.isFinite(k) || k < 1) k = Math.min(5, ranking.length);
-    let r = `<div class="ts-inline" style="align-items:flex-end; gap:8px; margin-bottom:6px;"><div><label>Tick the k strongest predictors</label><input type="number" id="corrTopK" min="1" max="${Math.max(1, ranking.length)}" value="${Math.min(k, Math.max(1, ranking.length))}" style="width:80px;"></div>
-      <div><button type="button" class="btn-secondary" style="width:auto; margin:0;" onclick="tickStrongestPredictors()" title="Ticks the k predictors with the largest absolute correlation with the target and unticks the rest (Meta columns and y(t) are left as they are)">Tick the k strongest</button></div></div>`;
+    let r = `<div class="ts-inline" style="align-items:flex-end; gap:8px; margin-bottom:6px;"><div><label>Number of predictors to include (k)</label><input type="number" id="corrTopK" min="1" max="${Math.max(1, ranking.length)}" value="${Math.min(k, Math.max(1, ranking.length))}" style="width:80px;"></div>
+      <div><button type="button" class="btn-secondary" style="width:auto; margin:0;" onclick="tickStrongestPredictors()" title="Ticks the k predictors with the largest absolute correlation with the target and unticks the rest (Meta columns and y(t) are left as they are)">Include the <span class="corrTopKN">${k}</span> strongest</button></div></div>`;
     r += `<table class="metrics-table"><thead><tr><th>#</th><th>Predictor</th><th>r with ${impEsc(d.tLabel)}</th><th>|r|</th><th>Rows</th><th>Ticked</th></tr></thead><tbody>`;
     ranking.forEach((x, i) => {
       const bar = `<span style="display:inline-block; height:8px; width:${Math.round(60 * Math.abs(x.r))}px; background:${x.r >= 0 ? 'rgba(2,132,199,0.7)' : 'rgba(217,119,6,0.7)'}; border-radius:2px; vertical-align:middle;"></span>`;
@@ -24644,7 +24644,7 @@ function v45CcfNote() {
   renderCorrelationPanel = function () { const r = o.apply(this, arguments); try { v45ExplainTopK(); } catch (e) {} return r; };
 })();
 function v45ExplainTopK() {
-  const btn = Array.from(document.querySelectorAll('button')).find(b => /Tick the k strongest/.test(b.textContent));
+  const btn = Array.from(document.querySelectorAll('button')).find(b => /Tick the k strongest|Include the \d+ strongest/.test(b.textContent));
   if (!btn || document.getElementById('v45TopKHelp')) return;
   const row = btn.closest('.ts-inline'); if (!row) return;
   row.insertAdjacentHTML('afterend', `<div id="v45TopKHelp" class="v45-help-line"><b>What it does:</b> ticks the k predictors with the largest absolute correlation with the target and unticks every other predictor (Meta columns and y(t) are not changed). Undo in Select Features restores the previous ticks. The correlations are computed on the rows chosen above (the training rows by default) and measure linear association only; for model-based selection with several methods, use <b>Variable Selection</b> (Expert view).</div>`);
@@ -29899,7 +29899,7 @@ function v452RankItems(d) {
 const V452_RANK_HELP = 'A first look at the data: each predictor is compared with the target on its own, without a model and without cross-validation. ' +
   'A categorical variable is shown as one row: η (eta, the correlation ratio) is the correlation of the target with the best prediction from the categories alone; η² is the share of the target\'s variance explained by them. ' +
   'A single 0/1 dummy always has a small r when its category is a small share of the rows, so the dummies are judged together. ' +
-  '"Tick the k strongest" is for a first look or for teaching. It is not a step before Variable Selection: choosing the candidates by their correlation on the training rows, and then cross-validating on the same rows, makes the cross-validated errors look better than they are (selection bias), and it drops predictors that only help together with others.';
+  '"Include the k strongest" is for a first look or for teaching. It is not a step before Variable Selection: choosing the candidates by their correlation on the training rows, and then cross-validating on the same rows, makes the cross-validated errors look better than they are (selection bias), and it drops predictors that only help together with others.';
 function v452RenderRank() {
   const rankBox = document.getElementById('corrRankOutput'); if (!rankBox) return;
   const d = corrPreviewData();
@@ -29909,8 +29909,8 @@ function v452RenderRank() {
   let k = parseInt((document.getElementById('corrTopK') || {}).value, 10); if (!Number.isFinite(k) || k < 1) k = Math.min(5, items.length);
   k = Math.min(k, Math.max(1, items.length));
   const bar = (v, pos) => `<span style="display:inline-block; height:8px; width:${Math.round(60 * Math.min(1, Math.abs(v)))}px; background:${pos ? 'rgba(2,132,199,0.7)' : 'rgba(217,119,6,0.7)'}; border-radius:2px; vertical-align:middle;"></span>`;
-  let h = `<div class="ts-inline" style="align-items:flex-end; gap:8px; margin-bottom:4px;"><div><label>Tick the k strongest predictors<span class="info-hint" title="${v452Esc(V452_RANK_HELP)}">?</span></label><input type="number" id="corrTopK" min="1" max="${items.length}" value="${k}" style="width:80px;"></div>
-    <div><button type="button" class="btn-secondary" style="width:auto; margin:0;" onclick="tickStrongestPredictors()" title="Ticks the k strongest rows of this table (a categorical variable counts as one row: all its dummies or none) and unticks the other predictors">Tick the k strongest</button></div></div>
+  let h = `<div class="ts-inline" style="align-items:flex-end; gap:8px; margin-bottom:4px;"><div><label>Number of predictors to include (k)<span class="info-hint" title="${v452Esc(V452_RANK_HELP)}">?</span></label><input type="number" id="corrTopK" min="1" max="${items.length}" value="${k}" style="width:80px;"></div>
+    <div><button type="button" class="btn-secondary" style="width:auto; margin:0;" onclick="tickStrongestPredictors()" title="Ticks the k strongest rows of this table (a categorical variable counts as one row: all its dummies or none) and unticks the other predictors">Include the <span class="corrTopKN">${k}</span> strongest</button></div></div>
     <div class="v452-subtitle" style="margin:0 0 6px;">For a first look or teaching; not a step before Variable Selection.</div>
     <div id="v45TopKHelp" class="v45-help-line"><b>What it does:</b> ticks the k strongest rows of the table below and unticks every other predictor (Meta columns and y(t) are not changed). A categorical variable is one row, so all its dummies are ticked or none. Undo in Select Features restores the previous ticks. Computed on ${d.basis}.</div>`;
   h += `<table class="metrics-table v452-rank" data-v41done="1"><thead><tr><th>#</th><th style="text-align:left;">Predictor</th><th>r with ${v452Esc(d.tLabel)}</th><th>|r| or η</th><th>Rows</th><th>Ticked</th></tr></thead><tbody>`;
@@ -30269,7 +30269,7 @@ v45RenderVarSel = function () {
   const all = cols.concat(fcols);
   V452.vsCols = all;
   let h = '';
-  if (R.screenedByK) h += `<div class="leakage-hint warn" style="display:block; margin-bottom:8px;"><b>These candidates were chosen with "Tick the k strongest"</b>, by their correlation with the target on all training rows, including the rows that act as validation folds here. The cross-validated errors are therefore optimistic (selection bias, Ambroise and McLachlan 2002), and predictors that only help together with others may have been dropped. For a fair comparison, tick all plausible predictors and let the cross-validated methods choose.</div>`;
+  if (R.screenedByK) h += `<div class="leakage-hint warn" style="display:block; margin-bottom:8px;"><b>These candidates were chosen with "Include the k strongest"</b>, by their correlation with the target on all training rows, including the rows that act as validation folds here. The cross-validated errors are therefore optimistic (selection bias, Ambroise and McLachlan 2002), and predictors that only help together with others may have been dropped. For a fair comparison, tick all plausible predictors and let the cross-validated methods choose.</div>`;
   h += `<div style="font-size:12px; margin-bottom:6px;">${R.n} training rows, ${R.names.length} candidate predictors, ${R.folds} cross-validation folds (${R.isC ? 'log loss' : 'mean squared error'}).${R.dropped.length ? ` Constant on the training rows and left out: ${R.dropped.map(v41Esc).join(', ')}.` : ''}${R.screen ? ` Screening inside each fold kept the ${R.screen.d} predictors with the largest |r|${R.screen.d >= R.names.length ? ' (all of them: screening had no effect)' : ''}.` : ''}</div>`;
   if (R.filter) h += `<div class="v452-vs-note"><b>Filters</b> (grey columns) judge one predictor at a time, without a model, and do not use cross-validation: a descriptive first look${(document.getElementById('v452CountFilters') || {}).checked ? '. They count in "Selected by" because "Count the filters too" is ticked.' : ', so they do not count in "Selected by".'} <b>Model-based</b> methods fit all the candidates together.</div>`;
   h += `<div class="table-container v452-vs-box"><table class="metrics-table v452-vs" data-v41done="1"><thead><tr><th rowspan="2" style="text-align:left;">Predictor</th><th rowspan="2" class="v452-sortable" data-c="__sel" title="Number of model-based methods that select the predictor${(document.getElementById('v452CountFilters') || {}).checked ? ' (and the F-test filter)' : ''}">Selected by<span class="v452-dir">↑ = more methods agree</span></th>`;
@@ -30346,7 +30346,7 @@ v452AddHelp([
   { title: 'CV permutation importance', cat: 'Data', terms: ['cv permutation importance'], text: 'A variable-selection method (Variable Selection card). In each cross-validation fold of the current scheme (walk-forward for a time-series split, folds cut between dates for panel data) the model, Random Forest by default, is fitted on the fitting part. Each predictor is then shuffled on the fold\'s validation rows, 10 times, and the increase in mean squared error (regression, % of the unshuffled MSE) or the drop in accuracy (classification, percentage points) is recorded. The column shows the mean over the folds with a 95% t-interval; a predictor is selected when the whole interval lies above zero. Uses the training rows only (Breiman 2001).' },
   { title: 'Boruta', cat: 'Data', terms: ['boruta', 'shadow features'], text: 'A variable-selection method (Kursa and Rudnicki 2010). Every predictor gets a shuffled "shadow" copy, which by construction has no relation to the target. A Random Forest is fitted on the predictors and the shadows, repeatedly; in each run a predictor scores a hit when its importance (impurity decrease) is larger than that of the most important shadow. A two-sided binomial test (p = 0.01, Bonferroni-corrected for the number of predictors) then calls a predictor Confirmed (significantly more hits than chance), Rejected (significantly fewer, and dropped from later runs) or Tentative (not decided within the maximum number of runs). Selected = Confirmed. With a model other than Random Forest the importance is permutation importance on a random third of the training rows held out in each run.' },
   { title: 'RFECV error chart', cat: 'Data', terms: ['rfecv chart', 'one-standard-error rule'], text: 'Cross-validated error of the RFE models with 1, 2, 3, ... predictors, with ±1 standard error over the folds. The models are nested along the RFE ranking (size 3 = the top 2 plus the next). RFECV keeps the size with the lowest error (orange point); the one-standard-error rule keeps the smallest size whose error is within one standard error of that minimum (blue point), as for LASSO. A flat curve means that several sizes forecast equally well.' },
-  { title: 'Screening before selection (selection bias)', cat: 'Data', terms: ['selection bias', 'screening', 'sure independence screening'], text: 'Choosing the candidates by their correlation with the target on all training rows (for example with "Tick the k strongest") and then cross-validating on the same rows lets the validation folds influence which predictors survive: the cross-validated errors look better than they are (Ambroise and McLachlan 2002). Screening is legitimate when there are far more predictors than rows, but it must be repeated inside each fold, on that fold\'s fitting rows only: that is what "Screen first (inside each fold)" does (Sure Independence Screening, Fan and Lv 2008; default d = n / ln n).' },
+  { title: 'Screening before selection (selection bias)', cat: 'Data', terms: ['selection bias', 'screening', 'sure independence screening'], text: 'Choosing the candidates by their correlation with the target on all training rows (for example with "Include the k strongest") and then cross-validating on the same rows lets the validation folds influence which predictors survive: the cross-validated errors look better than they are (Ambroise and McLachlan 2002). Screening is legitimate when there are far more predictors than rows, but it must be repeated inside each fold, on that fold\'s fitting rows only: that is what "Screen first (inside each fold)" does (Sure Independence Screening, Fan and Lv 2008; default d = n / ln n).' },
   { title: 'Correlation ratio η (categorical predictors)', cat: 'Data', terms: ['correlation ratio', 'eta'], text: 'For a categorical predictor (all its dummies together), η is the correlation of the target with the category means; η² is the share of the target\'s variance that the categories explain (the R² of a regression of the target on the dummies). A single dummy always has a small r when its category is a small share of the rows, even when that category differs a lot, so the dummies are judged together.' },
   { title: 'Common variables in panel data', cat: 'Data', terms: ['common variable', 'common variables'], text: 'In panel data, a variable that has the same value for every unit at a given date (for example oil prices, the VIX or an exchange rate in a panel of countries). It varies only over time, so its correlation with the target rests on the number of dates, not on the number of rows. A badge "common" marks it in the correlation ranking.' }
 ]);
@@ -55263,8 +55263,19 @@ function q64PyInsert(r) {
 .q66 table.q66-t td:nth-child(2), .q66 table.q66-t th:nth-child(2), .q66 table.q66-t td:first-child, .q66 table.q66-t th:first-child { text-align:left; }
 .q66 table.q66-t tbody tr { cursor:pointer; }
 .q66 table.q66-t tbody tr:hover td { background:rgba(var(--v462-good-rgb, 14,165,233), .08); }
-.q66 table.q66-t tr.q66-crit td { background:rgba(var(--v462-good-rgb, 14,165,233), .10); }
-.q66 table.q66-t tr.q66-pick td { background:rgba(var(--v462-good-rgb, 14,165,233), .26); }
+.q66 table.q66-t tr.q66-c td { background:#dbeafe; }
+.q66 table.q66-t tr.q66-u td { background:#dcfce7; }
+.q66 .q66-legend { font-size:12px; color:var(--text-muted, #6b7280); margin:4px 0 2px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.q66 .q66-sw { display:inline-block; width:14px; height:10px; border-radius:3px; border:1px solid rgba(0,0,0,.12); margin-left:6px; }
+.q66 .q66-sw:first-child { margin-left:0; }
+.q66 .q66-swc { background:#dbeafe; } .q66 .q66-swu { background:#dcfce7; }
+.q66 .q66-tag, .q66 .q66-tagu { font-size:11px; font-weight:700; margin-left:4px; }
+.q66 .q66-tag { color:#15803d; } .q66 .q66-tagu { color:#15803d; font-weight:600; }
+.q66 td.q66-n { text-align:center !important; }
+.q66 .q66-num { display:inline-block; text-align:right; font-family:'IBM Plex Mono', Consolas, 'Courier New', monospace; font-variant-numeric:tabular-nums; }
+.q66 .q66-stars { display:inline-block; width:3ch; text-align:left; font-family:'IBM Plex Mono', Consolas, monospace; }
+.q66 .q66-rej { display:inline-block; width:6ch; text-align:left; margin-left:2px; font-size:11px; font-weight:700; color:#b45309; }
+.q66 .q66-eqbox { margin:6px 0 8px; overflow-x:auto; }
 .q66 td.q66-best { font-weight:700; }
 .q66 td.q66-lbbad { color:#b45309; }
 .q66 .q66-sel { margin:8px 0; font-size:13px; }
@@ -55430,66 +55441,106 @@ function q66LagsTxt(F, st) {
   const ex = L.filter(k => k > st.p);
   return pre + run + (ex.length ? ` + ${ex.join(', ')}` : '');
 }
-function q66CritName(mode, C) { return mode === 'cv' ? `CV ${C.CV && C.CV.key ? C.CV.key.toUpperCase() : ''}` : (mode === 'bic' ? 'BIC (SIC)' : 'AIC'); }
+function q66CritName(mode, C) { return mode === 'cv' ? `CV ${C.CV && C.CV.key ? C.CV.key.toUpperCase() : ''}` : (mode === 'bic' ? 'BIC' : 'AIC'); }
+/* numbers aligned on the decimal point: every number of a column is padded to the same width (monospaced digits), the block centred */
+function q66Al(txt, w, extra) { return `<span class="q66-num" style="min-width:${w}ch">${txt}</span>${extra !== undefined ? extra : ''}`; }
+function q66W(list) { return Math.max(1, ...list.map(t => String(t).length)); }
+function q66Fix(v, d) { return Number.isFinite(v) ? v.toFixed(d) : '–'; }
+/* the rows the criterion keeps (light blue) and the rows of your choice (light green) */
+function q66RowCls(C, st) {
+  const pb = C.best.p, pu = C.pick.p;
+  if (pu === pb) return st.p <= pb ? 'q66-c' : '';
+  if (pu > pb) return st.p <= pb ? 'q66-c' : (st.p <= pu ? 'q66-u' : '');
+  return st.p <= pu ? 'q66-u' : (st.p <= pb ? 'q66-c' : '');
+}
 function q66TableHTML(C, forReport) {
   const F = C.F, rows = F.res.filter(st => !st.na), mode = C.mode;
-  const cols = [['r2', 'R²', 1], ['ar2', 'Adj. R²', 1], ['aic', 'AIC', -1], ['bic', 'BIC (SIC)', -1], ['hq', 'HQ', -1], ['rmse', 'RMSE', -1]];
-  if (mode === 'cv') cols.push(['cv', `CV ${q66Esc((C.CV.key || '').toUpperCase())}`, C.CV.higher ? 1 : -1]);
+  const cols = [['r2', 'R²', 1, 4], ['ar2', 'Adj. R²', 1, 4], ['aic', 'AIC', -1, 4], ['bic', 'BIC (SIC)', -1, 4], ['hq', 'HQ', -1, 4], ['rmse', 'RMSE', -1, 4]];
+  if (mode === 'cv') cols.push(['cv', `CV ${q66Esc((C.CV.key || '').toUpperCase())}`, C.CV.higher ? 1 : -1, 4], ['cvSe', '± SE', 0, 4]);
   const bestOf = {};
-  cols.forEach(([k, , dir]) => { let bv = null; rows.forEach(st => { const v = st[k]; if (Number.isFinite(v) && (bv === null || (dir > 0 ? v > bv : v < bv))) bv = v; }); bestOf[k] = bv; });
+  cols.forEach(([k, , dir]) => { if (!dir) return; let bv = null; rows.forEach(st => { const v = st[k]; if (Number.isFinite(v) && (bv === null || (dir > 0 ? v > bv : v < bv))) bv = v; }); bestOf[k] = bv; });
   const hasLb = rows.some(st => st.lb && Number.isFinite(st.lb.p));
   const tgtName = q66Esc(C.tgt) + (F.h > 0 ? ` (t+${F.h})` : '');
-  let h = `<div class="table-container ${forReport ? '' : 'v41-nosort q66-tbl'}"><table class="metrics-table q66-t"><thead><tr><th>p</th><th>Predictors of ${tgtName}</th><th>n</th><th>k</th>${cols.map(c => `<th>${c[1]}</th>`).join('')}${mode === 'cv' ? '<th>± SE</th>' : ''}${hasLb ? '<th title="Ljung-Box test of the residuals, 12 lags: a small p-value means serial correlation is left in the residuals (more lags may be needed)">Ljung-Box p (12)</th>' : ''}</tr></thead><tbody>`;
+  const W = {}; cols.forEach(([k, , , d]) => { W[k] = q66W(rows.map(st => q66Fix(st[k], d))); });
+  const wN = q66W(rows.map(st => st.n)), wK = q66W(rows.map(st => st.k)), wL = q66W(rows.map(st => st.lb ? q66Fix(st.lb.p, 3) : '–'));
+  let h = `<div class="table-container q66-tbl"><table class="metrics-table q66-t"><thead><tr><th>p</th><th>Predictors of ${tgtName}</th><th>n</th><th>k</th>${cols.map(c => `<th>${c[1]}</th>`).join('')}${hasLb ? '<th title="Ljung-Box test of the residuals, 12 lags: reject = serial correlation is left in the residuals (more lags may be needed)">Ljung-Box p (12)</th>' : ''}</tr></thead><tbody>`;
   rows.forEach(st => {
     const isBest = st === C.best, isPick = st === C.pick;
-    h += `<tr data-p="${st.p}" class="${isPick ? 'q66-pick' : ''}${isBest ? ' q66-crit' : ''}"><td><b>${st.p}</b>${isPick ? (isBest ? ' ◀ chosen' : ' ◀ your choice') : (isBest && !forReport ? ` <small>(${q66Esc(q66CritName(mode, C))})</small>` : '')}</td><td>${q66Esc(q66LagsTxt(F, st))}</td><td>${st.n}</td><td>${st.k}</td>` +
-      cols.map(([k]) => `<td class="${Number.isFinite(st[k]) && st[k] === bestOf[k] ? 'q66-best' : ''}">${q66Fmt(st[k], k === 'r2' || k === 'ar2' ? 4 : undefined)}</td>`).join('') +
-      (mode === 'cv' ? `<td>${q66Fmt(st.cvSe)}</td>` : '') +
-      (hasLb ? `<td class="${st.lb && st.lb.p < 0.05 ? 'q66-lbbad' : ''}">${st.lb ? q66Fmt(st.lb.p, 3) : '–'}</td>` : '') + `</tr>`;
+    const tag = isPick && C.added ? ' <span class="q66-tag">added</span>' : (isPick && !isBest ? ' <span class="q66-tagu">your choice</span>' : '');
+    const lab = `<b>${st.p}</b>${isBest ? ` <small>(chosen by ${q66Esc(q66CritName(mode, C))})</small>` : ''}${tag}`;
+    const rej = st.lb && st.lb.p < 0.05;
+    h += `<tr data-p="${st.p}" class="${q66RowCls(C, st)}"><td>${lab}</td><td>${q66Esc(q66LagsTxt(F, st))}</td><td class="q66-n">${q66Al(st.n, wN)}</td><td class="q66-n">${q66Al(st.k, wK)}</td>` +
+      cols.map(([k, , , d]) => `<td class="q66-n${Number.isFinite(st[k]) && st[k] === bestOf[k] ? ' q66-best' : ''}">${q66Al(q66Fix(st[k], d), W[k])}</td>`).join('') +
+      (hasLb ? `<td class="q66-n${rej ? ' q66-lbbad' : ''}">${q66Al(st.lb ? q66Fix(st.lb.p, 3) : '–', wL, ` <span class="q66-rej">${rej ? 'reject' : ''}</span>`)}</td>` : '') + `</tr>`;
   });
   h += `</tbody></table></div>`;
   return h;
 }
+function q66Legend(C) {
+  const cn = q66Esc(q66CritName(C.mode, C));
+  return `<div class="q66-legend"><span class="q66-sw q66-swc"></span> lags kept by ${cn} (AR(${C.best.p}))${C.pick !== C.best ? ` <span class="q66-sw q66-swu"></span> your choice (AR(${C.pick.p}))` : ''}</div>`;
+}
+/* the terms in the order of the lags: the current value, lag 1, 2, 3 …, then the seasonal lags */
+function q66TermOrder(C, terms) {
+  const lagOf = nm => { const m = String(nm).match(/_lag(\d+)$/); return m ? +m[1] : (nm === 'const' ? -2 : -1); };
+  return terms.slice().sort((a, b) => lagOf(a.name) - lagOf(b.name));
+}
+function q66EqHTML(C, D, forReport) {
+  const F = C.F;
+  try {
+    if (typeof qeBlock !== 'function') throw 0;
+    const term = nm => { const m = String(nm).match(/^(.*)_lag(\d+)$/); if (m && m[1] === C.tgt) return qeV(C.tgt, `t−${m[2]}`); if (nm === `${C.tgt} (t)`) return qeV(C.tgt, 't'); return qeV(nm, 't'); };
+    const T = q66TermOrder(C, D.terms);
+    const rhs = T.map(t => t.name === 'const' ? [QE.o(t.b < 0 ? '−' : '+'), QE.n(qeNum(Math.abs(t.b)))] : [QE.o(t.b < 0 ? '−' : '+'), QE.n(qeNum(Math.abs(t.b)))].concat(term(t.name)));
+    rhs.push(qeErr('t'));
+    return qeBlock({ lines: [{ lhs: [qeV(C.tgt, F.h > 0 ? `t+${F.h}` : 't', { hat: false })], rhs }], notes: [] }, forReport ? { copy: false } : {});
+  } catch (e) {
+    return '';
+  }
+}
 function q66DetailHTML(C, forReport) {
   const F = C.F, st = C.pick, D = q66Detail(F, st);
-  const yname = `${q66Esc(C.tgt)}${F.h > 0 ? `<sub>t+${F.h}</sub>` : '<sub>t</sub>'}`;
-  const tn = nm => { const m = String(nm).match(/^(.*)_lag(\d+)$/); if (m && m[1] === C.tgt) return `${q66Esc(C.tgt)}<sub>t−${m[2]}</sub>`; if (nm === `${C.tgt} (t)`) return `${q66Esc(C.tgt)}<sub>t</sub>`; return q66Esc(nm); };
-  const num = v => (Math.abs(v) >= 1e4 || (Math.abs(v) < 1e-3 && v !== 0)) ? v.toExponential(3) : v.toFixed(4);
-  let eq = `${yname} = ${num(D.terms[0].b)}`;
-  D.terms.slice(1).forEach(t => { eq += ` ${t.b < 0 ? '−' : '+'} ${num(Math.abs(t.b))}·${tn(t.name)}`; });
-  eq += ' + ε';
+  const T = q66TermOrder(C, D.terms);
   const stars = p => p < 0.01 ? '***' : p < 0.05 ? '**' : p < 0.1 ? '*' : '';
-  let h = `<div class="q66-det"><div class="q66-dh">The ${st === C.best ? 'chosen' : 'selected'} autoregression: ${st.p} lag${st.p === 1 ? '' : 's'}${F.useYt ? ' and the current value' : ''}</div>
-    <div class="q66-eq">${eq}</div>
-    <div class="table-container ${forReport ? '' : 'v41-nosort'}"><table class="metrics-table q66-ct"><thead><tr><th>Term</th><th>Coefficient</th><th>Std. error</th><th>t</th><th>p-value</th></tr></thead><tbody>` +
-    D.terms.map(t => `<tr><td>${t.name === 'const' ? 'Constant' : q66Esc(t.name)}</td><td>${num(t.b)}${stars(t.p)}</td><td>${num(t.se)}</td><td>${Number.isFinite(t.t) ? t.t.toFixed(2) : '–'}</td><td>${Number.isFinite(t.p) ? (t.p < 0.0001 ? '<0.0001' : t.p.toFixed(4)) : '–'}</td></tr>`).join('') +
+  const fb = v => q66Fix(v, 4), fp = p => !Number.isFinite(p) ? '–' : (p < 0.0001 ? '<0.0001' : p.toFixed(4));
+  const wB = q66W(T.map(t => fb(t.b))), wS = q66W(T.map(t => fb(t.se))), wT = q66W(T.map(t => q66Fix(t.t, 2))), wP = q66W(T.map(t => fp(t.p)));
+  let h = `<div class="q66-det"><div class="q66-dh">The ${st === C.best ? 'chosen' : 'selected'} autoregression: AR(${st.p})${F.useYt ? ' with the current value' : ''}</div>
+    <div class="q66-eqbox">${q66EqHTML(C, D, forReport)}</div>
+    <div class="table-container"><table class="metrics-table q66-ct"><thead><tr><th>Term</th><th>Coefficient</th><th>Std. error</th><th>t</th><th>p-value</th></tr></thead><tbody>` +
+    T.map(t => `<tr><td>${t.name === 'const' ? 'Constant' : q66Esc(t.name)}</td><td class="q66-n">${q66Al(fb(t.b), wB, `<span class="q66-stars">${stars(t.p)}</span>`)}</td><td class="q66-n">${q66Al(fb(t.se), wS)}</td><td class="q66-n">${q66Al(q66Fix(t.t, 2), wT)}</td><td class="q66-n">${q66Al(fp(t.p), wP)}</td></tr>`).join('') +
     `</tbody></table></div>
-    <div class="feat-hint">OLS with a constant on ${st.n.toLocaleString()} training rows (the Test Set is not used); residual standard error ${num(D.s)} on ${D.df} degrees of freedom; R² ${st.r2.toFixed(4)}, adjusted R² ${st.ar2.toFixed(4)}; Ljung-Box (12 lags) ${Number.isFinite(D.lb.q) ? `Q = ${D.lb.q.toFixed(2)}, p = ${D.lb.p.toFixed(3)}${D.lb.p < 0.05 ? ': serial correlation is left in the residuals' : ': no serial correlation left'}` : 'not computed (too few rows)'}.${F.h > 1 ? ` With a horizon of ${F.h} the forecast errors of neighbouring rows overlap, so the residuals are autocorrelated up to lag ${F.h - 1} by construction and the Ljung-Box test rejects even for a good model.` : ''} * p &lt; 0.1, ** p &lt; 0.05, *** p &lt; 0.01.</div></div>`;
+    <div class="feat-hint">OLS with a constant on ${st.n.toLocaleString()} training rows (the Test Set is not used); residual standard error ${fb(D.s)} on ${D.df} degrees of freedom; R² ${st.r2.toFixed(4)}, adjusted R² ${st.ar2.toFixed(4)}; Ljung-Box (12 lags) ${Number.isFinite(D.lb.q) ? `Q = ${D.lb.q.toFixed(2)}, p = ${D.lb.p.toFixed(3)}${D.lb.p < 0.05 ? ': reject, serial correlation is left in the residuals' : ': no serial correlation left'}` : 'not computed (too few rows)'}.${F.h > 1 ? ` With a horizon of ${F.h} the forecast errors of neighbouring rows overlap, so the residuals are autocorrelated up to lag ${F.h - 1} by construction and the Ljung-Box test rejects even for a good model.` : ''} * p &lt; 0.1, ** p &lt; 0.05, *** p &lt; 0.01.</div></div>`;
   return h;
 }
+function q66AddBtn() { return document.querySelector('button[onclick="addDerivedVariable()"]'); }
 function q66Render(added) {
   const C = Q66.cmp; let box = document.getElementById('q66Cmp');
   if (!box) {
-    const btn = document.querySelector('button[onclick="addDerivedVariable()"]'); if (!btn) return;
+    const btn = q66AddBtn(); if (!btn) return;
     box = document.createElement('div'); box.id = 'q66Cmp'; box.className = 'q66';
     btn.parentNode.insertAdjacentElement('afterend', box);
   }
   if (!C) { box.innerHTML = ''; return; }
-  const F = C.F, mode = C.mode;
+  const F = C.F;
   const pickNames = (F.useYt ? [`${C.tgt} (t)`] : []).concat(C.pick.lags.map(k => derivedName('lag', C.tgt, k)));
-  box.innerHTML = `<div class="q66-head"><b>Autoregressions of ${q66Esc(C.tgt)}${F.h > 0 ? ` (t+${F.h})` : ''}, 1 to ${C.maxL} lags</b> <span class="feat-hint">on the same ${F.n.toLocaleString()} training rows; the row chosen by ${q66Esc(q66CritName(mode, C))} is highlighted, the best value of each column in bold. ${added ? '' : '<b>Click a row</b> to choose another number of lags.'}</span></div>
-    ${q66TableHTML(C, false)}
-    <div class="q66-sel">${added ? 'Added and ticked' : 'Will be added when you click <b>+ Add Variable(s)</b>'}: <b>${pickNames.map(q66Esc).join(', ')}</b>${F.useYt ? ` <small>(${q66Esc(C.tgt)} (t) is the current value, already used as a predictor through "Use the current value y(t) as a predictor")</small>` : ''}.${F.collinearFrom ? ' Longer lags were left out: they are combinations of the shorter ones.' : ''}</div>
+  box.innerHTML = `<div class="q66-head"><b>Autoregressions of ${q66Esc(C.tgt)}${F.h > 0 ? ` (t+${F.h})` : ''}: AR(1) to AR(${C.maxL})</b> <span class="feat-hint">on the same ${F.n.toLocaleString()} training rows; the best value of each column in bold. ${added ? '' : '<b>Click a row</b> to choose AR(p) (all the lags 1 to p), then <b>+ Add lags</b>.'}</span></div>
+    ${q66TableHTML(C, false)}${q66Legend(C)}
+    <div class="q66-sel">${added ? 'Added and ticked in Select Features' : 'Will be added when you click <b>+ Add lags</b>'}: <b>${pickNames.map(q66Esc).join(', ')}</b>${F.useYt ? ` <small>(${q66Esc(C.tgt)} (t) is the current value, already used as a predictor through "Use the current value y(t) as a predictor")</small>` : ''}.${F.collinearFrom ? ' Longer lags were left out: they are combinations of the shorter ones.' : ''}</div>
     ${q66DetailHTML(C, false)}`;
   box.querySelectorAll('tr[data-p]').forEach(tr => tr.onclick = () => {
     const st = C.F.res.find(x => x.p === +tr.dataset.p); if (!st || st.na) return;
-    C.pick = st; q66Render(false); q66Preview();
+    C.pick = st; C.added = false; q66Render(false); q66Preview();
   });
+  try { if (typeof v41EnhanceTables === 'function') v41EnhanceTables(box); } catch (e) {}
 }
+function q66RunLabel() { return `Run AR(1) to AR(${Q52.lag.max || 12})`; }
 function q66Preview() {
   const prev = document.getElementById('tfPreviewName'), C = Q66.cmp;
-  if (!prev || !C || C.sig !== q66Sig()) return;
-  prev.innerHTML = `lags ${q66Esc(C.pick.lags.join(', '))} of <span style="font-family:monospace;">${q66Esc(C.tgt)}</span> (${C.pick === C.best ? `chosen by ${q66Esc(q66CritName(C.mode, C))}` : 'your choice in the comparison'})`;
+  if (!prev) return;
+  const type = (document.getElementById('tfType') || {}).value;
+  if (type !== 'lag' || Q52.lag.mode === 'fixed') return;
+  if (!C || C.sig !== q66Sig()) { prev.innerHTML = `click <b>${q66Esc(q66RunLabel())}</b>, then a row of the table (AR(p): lags 1 to p of <span style="font-family:monospace;">${q66Esc(q52Target())}</span>), then <b>+ Add lags</b>`; return; }
+  prev.innerHTML = `lags ${q66Esc(C.pick.lags.join(', '))} of <span style="font-family:monospace;">${q66Esc(C.tgt)}</span> (AR(${C.pick.p}), ${C.pick === C.best ? `chosen by ${q66Esc(q66CritName(C.mode, C))}` : 'your choice'})`;
 }
 async function q66Compare() {
   const C = await q66Compute();
@@ -55499,15 +55550,18 @@ async function q66Compare() {
   try { document.getElementById('q66Cmp').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
 }
 function q66Buttons() {
-  const btn = document.querySelector('button[onclick="addDerivedVariable()"]'); if (!btn) return;
+  const btn = q66AddBtn(); if (!btn) return;
   let c = document.getElementById('q66CmpBtn');
-  if (!c) { c = document.createElement('button'); c.id = 'q66CmpBtn'; c.type = 'button'; c.className = 'btn-secondary'; c.textContent = 'Compare the lags'; c.title = 'Show every autoregression from 1 to Max lags (R², AIC, BIC, HQ, RMSE, Ljung-Box) and the chosen one, before adding anything'; c.onclick = () => q66Compare(); btn.insertAdjacentElement('afterend', c); }
+  if (!c) { c = document.createElement('button'); c.id = 'q66CmpBtn'; c.type = 'button'; c.className = 'btn-secondary'; c.title = 'Fit every autoregression from AR(1) to AR(Max lags) on the training rows and show R², AIC, BIC, HQ, RMSE and the Ljung-Box test; nothing is added yet'; c.onclick = () => q66Compare(); btn.insertAdjacentElement('beforebegin', c); }
   const type = (document.getElementById('tfType') || {}).value;
   const on = type === 'lag' && Q52.lag.mode !== 'fixed';
   c.style.display = on ? '' : 'none';
+  if (on && c.textContent !== q66RunLabel()) c.textContent = q66RunLabel();
+  const want = on ? '+ Add lags' : '+ Add Variable(s)';
+  if (btn.textContent !== want) btn.textContent = want;
   const box = document.getElementById('q66Cmp');
   if (box) box.style.display = type === 'lag' ? '' : 'none';
-  if (Q66.cmp && Q66.cmp.sig !== q66Sig() && box && box.innerHTML && !Q66.cmp.added) { Q66.cmp = null; box.innerHTML = '<div class="feat-hint">The settings or the data changed: click <b>Compare the lags</b> again.</div>'; }
+  if (Q66.cmp && Q66.cmp.sig !== q66Sig() && box && box.innerHTML && !Q66.cmp.added) { Q66.cmp = null; box.innerHTML = `<div class="feat-hint">The settings or the data changed: click <b>${q66Esc(q66RunLabel())}</b> again.</div>`; }
 }
 /* + Add Variable(s): the comparison's choice when it is still valid, otherwise as before (and the full table after) */
 (function () {
@@ -55532,7 +55586,7 @@ function q66Buttons() {
         });
         try { updateSelectedCountDisplay(); onFeatureSelectionChanged(); } catch (e) {}
         C.added = true; Q66.cmp = C;
-        q52LagResult(unt);
+        try { const lr = document.getElementById('q52LagRes'); if (lr) lr.innerHTML = `<div class="q52-lagbox"><b>Added: AR(${best.p})</b>, lags ${q66Esc(best.lags.join(', '))} of ${q66Esc(C.tgt)} (${best === C.best ? 'chosen by ' + q66Esc(q66CritName(C.mode, C)) : 'your choice; ' + q66Esc(q66CritName(C.mode, C)) + ' chose AR(' + C.best.p + ')'}), ticked in Select Features${unt.length ? `; unticked: ${unt.map(q66Esc).join(', ')}` : ''}.</div>`; } catch (e) {}
         q66Render(true);
         try { v41SetDirty(true); } catch (e) {}
       }, 250);
@@ -55563,7 +55617,7 @@ function q66Buttons() {
     };
     // What's new (v5.7)
     const cur = Q51_NEWS[0][2];
-    cur.push(['<b>Compare the lags</b> (Data tab, Variable Construction, Lag): every autoregression from 1 to Max lags with R², adjusted R², AIC, BIC, HQ, RMSE and the Ljung-Box test, and the chosen one with its coefficients, before anything is added; click a row to choose another number of lags.', 'lagcmp', 1]);
+    cur.push(['<b>Run AR(1) to AR(p)</b> (Data tab, Variable Construction, Lag, number of lags by BIC, AIC or CV): every autoregression with R², adjusted R², AIC, BIC, HQ, RMSE and the Ljung-Box test, and the chosen one with its coefficients and equation; click a row, then <b>+ Add lags</b>.', 'lagcmp', 1]);
     Q51_SHOW.lagcmp = () => { try { showTab('tabData'); } catch (e) {} setTimeout(() => { try { const t = document.getElementById('tfType'); t.value = 'lag'; onTransformTypeChange(); q51Flash('#tfLagBox'); } catch (e) {} }, 300); };
   } catch (e) { console.error('q66 hooks', e); }
 })();
@@ -56118,6 +56172,22 @@ function q68CurveHTML(R, C) {
   const go = () => { try { q68UI(); } catch (e) { console.error('q68 ui', e); } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
   setTimeout(go, 1600);
+})();
+
+</script>
+<script id="x69-layer">
+/* x69: the button "Include the k strongest" follows the number in the box */
+function q69TopKSync() {
+  try {
+    const inp = document.getElementById('corrTopK'); if (!inp) return;
+    const v = parseInt(inp.value, 10);
+    document.querySelectorAll('.corrTopKN').forEach(e => { const t = Number.isFinite(v) && v >= 1 ? String(v) : 'k'; if (e.textContent !== t) e.textContent = t; });
+  } catch (e) {}
+}
+(function () {
+  try { const o = renderCorrelationPanel; renderCorrelationPanel = function () { const r = o.apply(this, arguments); q69TopKSync(); return r; }; } catch (e) {}
+  document.addEventListener('input', ev => { if (ev.target && ev.target.id === 'corrTopK') q69TopKSync(); }, true);
+  document.addEventListener('change', ev => { if (ev.target && ev.target.id === 'corrTopK') q69TopKSync(); }, true);
 })();
 
 </script>
