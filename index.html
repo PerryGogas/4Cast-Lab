@@ -56222,6 +56222,8 @@ body.dark .q70-care { color:#fbbf24; }
 <script id="x70-layer">
 const Q70_PY_MODELS = "# ---- the model, as 4Cast Lab estimated it ----\nNAMES = CFG[\"names\"]\nyv = num(\"y\")\nXm = np.column_stack([num(f\"x{j}\") for j in range(len(NAMES))])\nOFF = num(\"offset\") if CFG[\"has_offset\"] else None\nGROUPS = np.asarray(text(\"cluster\")) if CFG[\"has_cluster\"] else None\nKIND = CFG[\"kind\"]\n\n\ndef fit_kw():\n    if CFG[\"cov\"] == \"HC0\":\n        return dict(cov_type=\"HC0\")\n    if CFG[\"cov\"] == \"cluster\":\n        return dict(cov_type=\"cluster\", cov_kwds={\"groups\": pd.factorize(GROUPS)[0]})\n    return {}\n\n\nif KIND == \"quantreg\":\n    for a in APP[\"qs\"]:\n        q = a[\"q\"]\n        vc = \"iid\" if CFG[\"cov\"] == \"iid\" else \"robust\"\n        res = sm.QuantReg(yv, Xm).fit(q=q, vcov=vc, kernel=\"epa\", bandwidth=\"hsheather\", max_iter=1000, p_tol=1e-6)\n        py = {\"coef\": res.params, \"se\": res.bse, \"p\": res.pvalues}\n        cols = (\"coef\",) if CFG[\"cov\"] == \"boot\" else (\"coef\", \"se\", \"p\")\n        compare(f\"Quantile regression, tau = {q}\", NAMES, py, a, cols)\n        DIFFS.append((f\"coef, tau = {q}\", rel_diff(res.params, a[\"coef\"])))\n        if CFG[\"cov\"] != \"boot\":\n            DIFFS.append((f\"std.err, tau = {q}\", rel_diff(res.bse, a[\"se\"])))\n        print(f\"  pseudo R2: Python {res.prsquared:.6f}   4Cast Lab {a['pseudo_r2']:.6f}\")\n\nelif KIND in (\"poisson\", \"negbin\"):\n    pois = sm.Poisson(yv, Xm, offset=OFF).fit(disp=0, maxiter=500, **fit_kw())\n    mu = pois.predict(Xm, offset=OFF) if OFF is not None else pois.predict(Xm)\n    if KIND == \"poisson\":\n        res = pois\n        py = {\"coef\": res.params, \"se\": res.bse, \"p\": res.pvalues}\n        compare(\"Poisson regression\", NAMES, py, APP[\"main\"])\n    else:\n        nb = sm.NegativeBinomial(yv, Xm, offset=OFF, loglike_method=\"nb2\")\n        res = nb.fit(start_params=np.append(pois.params, 0.5), method=\"bfgs\", maxiter=5000, gtol=1e-10, disp=0, **fit_kw())\n        res = nb.fit(start_params=res.params, method=\"newton\", maxiter=200, disp=0, **fit_kw())\n        py = {\"coef\": res.params, \"se\": res.bse, \"p\": np.append(np.asarray(res.pvalues)[:-1], np.nan)}\n        compare(\"Negative binomial (NB2)\", NAMES + [\"alpha\"], py, APP[\"main\"])\n        lr = max(0.0, 2 * (res.llf - pois.llf))\n        print(f\"  LR test of alpha = 0: Python {lr:.6f} (p {0.5 * stats.chi2.sf(lr, 1):.6g})   4Cast Lab {APP['lr_alpha'][0]:.6f} (p {APP['lr_alpha'][1]:.6g})\")\n    DIFFS.append((\"coef\", rel_diff(res.params, APP[\"main\"][\"coef\"])))\n    DIFFS.append((\"std.err\", rel_diff(res.bse, APP[\"main\"][\"se\"])))\n    print(f\"  log-likelihood: Python {res.llf:.6f}   4Cast Lab {APP['llf']:.6f}\")\n    DIFFS.append((\"log-likelihood\", rel_diff([res.llf], [APP[\"llf\"]])))\n    # Cameron and Trivedi (1990): ((y - mu)^2 - y) / mu = alpha * mu + e, no constant; one-sided test of alpha > 0\n    z = ((yv - mu) ** 2 - yv) / mu\n    aux = sm.OLS(z, mu).fit()\n    t = float(aux.tvalues[0])\n    p1 = aux.pvalues[0] / 2 if t > 0 else 1 - aux.pvalues[0] / 2\n    print(f\"  overdispersion (Cameron-Trivedi): alpha {aux.params[0]:.6f}, t {t:.4f}, p {p1:.6g}   4Cast Lab alpha {APP['od'][0]:.6f}, t {APP['od'][1]:.4f}, p {APP['od'][2]:.6g}\")\n    DIFFS.append((\"overdispersion t\", rel_diff([t], [APP[\"od\"][1]])))\n\nelif KIND == \"tobit\":\n    L = CFG[\"lower\"] if CFG[\"lower\"] is not None else -np.inf\n    U = CFG[\"upper\"] if CFG[\"upper\"] is not None else np.inf\n    left, right = yv <= L, yv >= U\n    mid = ~(left | right)\n\n    def loglik(th):\n        b, s = th[:-1], th[-1]\n        if s <= 0:\n            return -np.inf\n        xb = Xm @ b\n        ll = np.zeros_like(yv)\n        ll[left] = stats.norm.logcdf((L - xb[left]) / s)\n        ll[right] = stats.norm.logcdf((xb[right] - U) / s)\n        ll[mid] = stats.norm.logpdf((yv[mid] - xb[mid]) / s) - np.log(s)\n        return ll.sum()\n\n    ols = sm.OLS(yv, Xm).fit()\n    th0 = np.append(ols.params, np.sqrt(ols.ssr / len(yv)))\n    opt = optimize.minimize(lambda th: -loglik(np.append(th[:-1], np.exp(th[-1]))), np.append(th0[:-1], np.log(th0[-1])),\n                            method=\"BFGS\", options={\"gtol\": 1e-10, \"maxiter\": 10000})\n    th = np.append(opt.x[:-1], np.exp(opt.x[-1]))\n    from statsmodels.tools.numdiff import approx_hess3\n    H = approx_hess3(th, loglik)\n    V = np.linalg.inv(-H)\n    if CFG[\"cov\"] in (\"HC0\", \"cluster\"):\n        from statsmodels.tools.numdiff import approx_fprime\n\n        def ll_i(th, i):\n            b, s = th[:-1], th[-1]\n            xb = Xm[i] @ b\n            if left[i]:\n                return stats.norm.logcdf((L - xb) / s)\n            if right[i]:\n                return stats.norm.logcdf((xb - U) / s)\n            return stats.norm.logpdf((yv[i] - xb) / s) - np.log(s)\n        S = np.array([approx_fprime(th, lambda t, i=i: ll_i(t, i), centered=True) for i in range(len(yv))])\n        if CFG[\"cov\"] == \"cluster\":\n            g = pd.factorize(GROUPS)[0]\n            S = np.array([S[g == c].sum(0) for c in range(g.max() + 1)])\n            G, n, k = S.shape[0], len(yv), len(th)\n            V = (G / (G - 1)) * ((n - 1) / (n - k)) * V @ (S.T @ S) @ V\n        else:\n            V = V @ (S.T @ S) @ V\n    se = np.sqrt(np.diag(V))\n    zst = th / se\n    p = 2 * stats.norm.sf(np.abs(zst))\n    p[-1] = np.nan\n    compare(\"Tobit\", NAMES + [\"sigma\"], {\"coef\": th, \"se\": se, \"p\": p}, APP[\"main\"])\n    DIFFS.append((\"coef\", rel_diff(th, APP[\"main\"][\"coef\"])))\n    DIFFS.append((\"std.err\", rel_diff(se, APP[\"main\"][\"se\"])))\n    print(f\"  log-likelihood: Python {loglik(th):.6f}   4Cast Lab {APP['llf']:.6f}\")\n    # average marginal effects on E(y): b_j * mean(Phi((U - xb)/s) - Phi((L - xb)/s))\n    xb = Xm @ th[:-1]\n    share = np.mean((stats.norm.cdf((U - xb) / th[-1]) if np.isfinite(U) else 1) - (stats.norm.cdf((L - xb) / th[-1]) if np.isfinite(L) else 0))\n    app = {e[0]: e for e in APP[\"ame\"]}\n    print(\"\\nAverage marginal effects on E(y): Python vs 4Cast Lab\")\n    for j, nm in enumerate(NAMES):\n        if nm in app:\n            print(f\"  {nm:24s} {th[j] * share: .6f}   {app[nm][1]: .6f}\")\n";
 const Q70_PY_NETPY = "NET = __NETCFG__\nISO2 = __ISO2__\nFORD = {\"D\": 0, \"W\": 1, \"M\": 2, \"Q\": 3, \"S\": 4, \"A\": 5}\n\n\ndef _net_per(s):\n    \"\"\"The period of a date text as (frequency, last day), as 4Cast Lab reads it.\"\"\"\n    import re, datetime as dt, calendar\n    s = str(s or \"\").strip()\n    def last_day(y, m):\n        return dt.date(y, m, calendar.monthrange(y, m)[1])\n    m = re.match(r\"^(\\d{4})-(\\d{2})-(\\d{2})\", s)\n    if m: return \"D\", dt.date(int(m[1]), int(m[2]), int(m[3]))\n    m = re.match(r\"^(\\d{4})$\", s)\n    if m: return \"A\", dt.date(int(m[1]), 12, 31)\n    m = re.match(r\"^(\\d{4})-?S([12])$\", s, re.I)\n    if m: return \"S\", last_day(int(m[1]), int(m[2]) * 6)\n    m = re.match(r\"^(\\d{4})-?Q([1-4])$\", s, re.I)\n    if m: return \"Q\", last_day(int(m[1]), int(m[2]) * 3)\n    m = re.match(r\"^(\\d{4})(?:-|M)(\\d{1,2})$\", s, re.I)\n    if m: return \"M\", last_day(int(m[1]), int(m[2]))\n    m = re.match(r\"^(\\d{4})-?W(\\d{1,2})$\", s, re.I)\n    if m:\n        d = dt.date(int(m[1]), 1, 4)\n        return \"W\", d - dt.timedelta(days=d.weekday()) + dt.timedelta(days=7 * (int(m[2]) - 1) + 6)\n    return None\n\n\ndef _net_bucket(d, f):\n    import datetime as dt, calendar\n    y, mo = d.year, d.month\n    if f == \"A\": return str(y), dt.date(y, 12, 31)\n    if f == \"S\":\n        s = 1 if mo <= 6 else 2\n        return f\"{y}-S{s}\", dt.date(y, s * 6, calendar.monthrange(y, s * 6)[1])\n    if f == \"Q\":\n        q = (mo - 1) // 3 + 1\n        return f\"{y}-Q{q}\", dt.date(y, q * 3, calendar.monthrange(y, q * 3)[1])\n    if f == \"M\": return f\"{y}-{mo:02d}\", dt.date(y, mo, calendar.monthrange(y, mo)[1])\n    if f == \"W\":\n        e = d + dt.timedelta(days=6 - d.weekday())\n        return e.isoformat(), e\n    return d.isoformat(), d\n\n\ndef _net_csv(text):\n    import csv, io\n    return [r for r in csv.reader(io.StringIO(text)) if len(r) > 1 or (r and r[0].strip())]\n\n\ndef _net_get(spec):\n    \"\"\"The values of one series: a list of (area code, area name, period text, value).\"\"\"\n    import requests\n    out = []\n    def get(url, kind):\n        r = requests.get(url, timeout=120)\n        r.raise_for_status()\n        return r.json() if kind == \"json\" else r.text\n    src = spec[\"src\"]\n    if src == \"wb\":\n        p, pages = 1, 1\n        while p <= pages and p < 30:\n            url = (f\"https://api.worldbank.org/v2/country/{';'.join(spec['areas'])}/indicator/{requests.utils.quote(spec['id'], safe='')}\"\n                   f\"?format=json&per_page=20000&date={spec['y0']}:{spec['y1']}&page={p}\")\n            j = get(url, \"json\")\n            if j and isinstance(j[0], dict) and j[0].get(\"message\"):\n                raise RuntimeError(j[0][\"message\"][0].get(\"value\", \"the World Bank answered with an error\"))\n            pages = int((j[0] or {}).get(\"pages\") or 1)\n            for r in (j[1] if len(j) > 1 and j[1] else []):\n                if r.get(\"value\") is None: continue\n                out.append((r.get(\"countryiso3code\") or (r.get(\"country\") or {}).get(\"id\"), (r.get(\"country\") or {}).get(\"value\") or \"\", r[\"date\"], float(r[\"value\"])))\n            p += 1\n    elif src == \"es\":\n        q = \"\".join(f\"&{requests.utils.quote(d, safe='')}={requests.utils.quote(v, safe='')}\" for d, v in (spec.get(\"dims\") or {}).items())\n        q += \"\".join(f\"&geo={requests.utils.quote(g, safe='')}\" for g in (spec.get(\"areas\") or []))\n        j = get(f\"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/{requests.utils.quote(spec['id'], safe='')}?lang=EN{q}\", \"json\")\n        ids, size = j[\"id\"], j[\"size\"]\n        def pos(d):\n            c = j[\"dimension\"][d][\"category\"]; idx = c[\"index\"]\n            codes = idx if isinstance(idx, list) else sorted(idx, key=lambda k: idx[k])\n            return codes, c.get(\"label\") or {}\n        D = [pos(d) for d in ids]\n        stride, m = [0] * len(ids), 1\n        for k in range(len(ids) - 1, -1, -1):\n            stride[k] = m; m *= size[k]\n        iG = ids.index(\"geo\") if \"geo\" in ids else -1\n        iT = ids.index(\"time\")\n        for key, v in (j.get(\"value\") or {}).items():\n            if v is None: continue\n            n = int(key); c = []\n            for k in range(len(ids)):\n                q2 = n // stride[k]; n -= q2 * stride[k]; c.append(q2)\n            g = D[iG][0][c[iG]] if iG >= 0 else \"\"\n            out.append((ISO2.get(g, g) if g else \"\", (D[iG][1].get(g, g) if g else \"\"), D[iT][0][c[iT]], float(v)))\n    elif src == \"ecb\":\n        k = \".\".join(str(spec[\"key\"]).split(\".\")[1:])\n        rows = _net_csv(get(f\"https://data-api.ecb.europa.eu/service/data/{requests.utils.quote(spec['id'], safe='')}/{k}?format=csvdata&startPeriod={spec['y0']}&endPeriod={spec['y1']}\", \"text\"))\n        H = rows[0] if rows else []\n        iP, iV = H.index(\"TIME_PERIOD\"), H.index(\"OBS_VALUE\")\n        for r in rows[1:]:\n            try: v = float(r[iV])\n            except (ValueError, IndexError): continue\n            if v == v and abs(v) != float(\"inf\"): out.append((\"\", \"\", r[iP], v))\n    elif src == \"oecd\":\n        parts = spec[\"def\"].split(\".\")\n        def key_for(areas):\n            it = iter(parts)\n            return \".\".join(\"+\".join(areas) if d == spec.get(\"geoId\") else next(it) for d in spec[\"dimIds\"])\n        def take(text):\n            rows = _net_csv(text); H = rows[0] if rows else []\n            iP, iV = H.index(\"TIME_PERIOD\"), H.index(\"OBS_VALUE\")\n            iG = H.index(spec[\"geoId\"]) if spec.get(\"geoId\") and spec[\"geoId\"] in H else -1\n            import re\n            iGL = iG + 1 if iG >= 0 and iG + 1 < len(H) and not re.match(r\"^[A-Z0-9_]+$\", H[iG + 1]) else -1\n            for r in rows[1:]:\n                try: v = float(r[iV])\n                except (ValueError, IndexError): continue\n                if v == v: out.append((r[iG] if iG >= 0 else \"\", r[iGL] if iGL >= 0 else (r[iG] if iG >= 0 else \"\"), r[iP], v))\n        url = lambda k: f\"https://sdmx.oecd.org/public/rest/data/{spec['id']}/{k}?startPeriod={spec['y0']}&endPeriod={spec['y1']}&format=csvfilewithlabels&dimensionAtObservation=AllDimensions\"\n        try:\n            take(get(url(key_for(spec.get(\"areas\") or [])), \"text\"))\n        except requests.HTTPError as e:\n            if e.response is None or e.response.status_code != 404: raise\n            for a in spec.get(\"areas\") or []:\n                try: take(get(url(key_for([a])), \"text\"))\n                except requests.HTTPError as e2:\n                    if e2.response is None or e2.response.status_code != 404: raise\n    keep = []\n    for r in out:\n        p = _net_per(r[2])\n        if p and spec[\"y0\"] <= p[1].year <= spec[\"y1\"]: keep.append(r)\n    return keep\n\n\ndef internet_download(cfg=NET):\n    \"\"\"Downloads the series again and builds the same table as 4Cast Lab's Load from the internet.\"\"\"\n    import pandas as pd\n    if cfg.get(\"link\"):\n        import requests, io\n        r = requests.get(cfg[\"link\"], timeout=120); r.raise_for_status()\n        b = r.content\n        if b[:2] == b\"PK\" or b[:2] == b\"\\xd0\\xcf\": return pd.read_excel(io.BytesIO(b))\n        return pd.read_csv(io.BytesIO(b))\n    got = []\n    for spec in cfg[\"specs\"]:\n        rows = _net_get(spec)\n        if not rows: raise RuntimeError(f\"{spec['name']}: no values for these countries and years\")\n        fs = {_net_per(r[2])[0] for r in rows}\n        got.append((spec, rows, max(fs, key=lambda f: FORD[f])))\n    target = max((g[2] for g in got), key=lambda f: FORD[f])\n    areas = {}\n    for _, rows, _ in got:\n        for a, an, _, _ in rows:\n            if a: areas.setdefault(a, an or a)\n    panel = len(areas) > 1\n    cells = {}\n    for spec, rows, f in got:\n        acc = {}\n        for a, an, per, v in rows:\n            d = _net_per(per)[1]; k, end = _net_bucket(d, target)\n            a2 = a if panel else \"\"\n            e = acc.setdefault((a2, k), {\"area\": a2, \"k\": k, \"end\": end, \"s\": 0.0, \"n\": 0, \"last\": None, \"lt\": None})\n            e[\"s\"] += v; e[\"n\"] += 1\n            if e[\"lt\"] is None or d >= e[\"lt\"]: e[\"lt\"], e[\"last\"] = d, v\n        for key, e in acc.items():\n            c = cells.setdefault(key, {\"area\": e[\"area\"], \"k\": e[\"k\"], \"end\": e[\"end\"], \"vals\": {}})\n            c[\"vals\"][spec[\"name\"]] = e[\"last\"] if (f == target or cfg.get(\"conv\") == \"last\") else e[\"s\"] / e[\"n\"]\n    names = [g[0][\"name\"] for g in got]\n    cl = sorted(cells.values(), key=lambda c: (c[\"area\"], c[\"end\"]))\n    if panel: cl = sorted(cl, key=lambda c: (c[\"end\"], areas.get(c[\"area\"], \"\")))\n    if panel and cfg.get(\"layout\") == \"wide\":\n        one = len(got) == 1\n        def col(spec, a):\n            an = areas.get(a, a)\n            return spec[\"name\"] if not a else (an if one else f\"{spec['name']}_{an}\")\n        cols, byk = [], {}\n        for spec, rows, _ in got:\n            for a in sorted({r[0] or \"\" for r in rows}, key=lambda a: areas.get(a, a)):\n                if col(spec, a) not in cols: cols.append(col(spec, a))\n        for c in cells.values():\n            o = byk.setdefault(c[\"k\"], {\"end\": c[\"end\"], \"v\": {}})\n            for spec, _, _ in got:\n                if spec[\"name\"] in c[\"vals\"]: o[\"v\"][col(spec, c[\"area\"])] = c[\"vals\"][spec[\"name\"]]\n        recs = [dict({\"Date\": o[\"end\"].isoformat()}, **{c: o[\"v\"].get(c) for c in cols}) for o in sorted(byk.values(), key=lambda o: o[\"end\"])]\n        return pd.DataFrame(recs, columns=[\"Date\"] + cols)\n    recs = []\n    for c in cl:\n        o = {}\n        if panel: o[\"Country\"] = areas.get(c[\"area\"], c[\"area\"] or \"\")\n        o[\"Date\"] = c[\"end\"].isoformat()\n        for n in names: o[n] = c[\"vals\"].get(n)\n        recs.append((c, o))\n    if panel:\n        common = [spec[\"name\"] for spec, rows, _ in got if not any(r[0] for r in rows)]\n        if common:\n            byk = {c[\"k\"]: c for c, _ in recs if c[\"area\"] == \"\"}\n            for c, o in recs:\n                if c[\"area\"] == \"\": continue\n                for n in common:\n                    src = byk.get(c[\"k\"])\n                    if src and n in src[\"vals\"]: o[n] = src[\"vals\"][n]\n            recs = [(c, o) for c, o in recs if c[\"area\"] != \"\"]\n    return pd.DataFrame([o for _, o in recs])\n\n\ndef compare_download(new, old):\n    \"\"\"Compares a fresh download with the data used here: the common columns, row by row (by Country and Date).\"\"\"\n    import numpy as np, pandas as pd\n    keys = [k for k in (\"Country\", \"Date\") if k in new.columns and k in old.columns]\n    num = [c for c in new.columns if c in old.columns and c not in keys]\n    if not keys or not num:\n        print(\"Nothing to compare: no common Date column or no common series.\"); return\n    a = new.copy(); b = old.copy()\n    for d in (a, b): d[\"Date\"] = pd.to_datetime(d[\"Date\"], errors=\"coerce\").dt.strftime(\"%Y-%m-%d\")\n    m = a.merge(b, on=keys, how=\"outer\", suffixes=(\"_new\", \"_used\"), indicator=True)\n    print(f\"Rows only in the new download: {(m['_merge'] == 'left_only').sum()}, only in the data used here: {(m['_merge'] == 'right_only').sum()}\")\n    both = m[m[\"_merge\"] == \"both\"]\n    for c in num:\n        x = pd.to_numeric(both[c + \"_new\"], errors=\"coerce\"); y = pd.to_numeric(both[c + \"_used\"], errors=\"coerce\")\n        diff = ~((x - y).abs() <= 1e-9 * np.maximum(1, y.abs()) ) & ~(x.isna() & y.isna())\n        print(f\"  {c}: {int(diff.sum())} of {len(both)} common rows differ\" + (\" (revised by the source, or new values)\" if diff.any() else \"\"))\n";
+const Q70_PY_UPD_APPLY = "# 4Cast Lab: put the new version in place of the old one and start it (written and started by the app; it can be deleted)\n$ErrorActionPreference = 'Stop'\n$old = {{OLD}}\n$new = {{NEW}}\n$result = {{RESULT}}\n$expect = {{SHA}}\n$ver = {{VER}}\n$bak = $old + '.old'\nfunction Res($t) { Set-Content -LiteralPath $result -Value $t -Encoding UTF8 }\nfunction Free() { try { $f = [IO.File]::Open($old, 'Open', 'ReadWrite', 'None'); $f.Close(); return $true } catch { return $false } }\n$free = $false\nfor ($i = 0; $i -lt 40 -and -not $free; $i++) { if (Free) { $free = $true } else { Start-Sleep -Milliseconds 500 } }\nif (-not $free) {\n  Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $old } | Stop-Process -Force -ErrorAction SilentlyContinue\n  for ($i = 0; $i -lt 20 -and -not $free; $i++) { Start-Sleep -Milliseconds 500; if (Free) { $free = $true } }\n}\ntry {\n  if (-not $free) { throw 'the running 4Cast Lab could not be closed' }\n  if ((Get-FileHash -LiteralPath $new -Algorithm SHA256).Hash.ToLower() -ne $expect) { throw 'the downloaded file was changed after the check (antivirus?)' }\n  if (Test-Path -LiteralPath $bak) { Remove-Item -LiteralPath $bak -Force -Recurse -Confirm:$false }\n  Move-Item -LiteralPath $old -Destination $bak -Force\n  try {\n    Copy-Item -LiteralPath $new -Destination $old -Force\n    if ((Get-FileHash -LiteralPath $old -Algorithm SHA256).Hash.ToLower() -ne $expect) { throw 'the new file could not be written completely' }\n  } catch {\n    Remove-Item -LiteralPath $old -Force -ErrorAction SilentlyContinue\n    Move-Item -LiteralPath $bak -Destination $old -Force\n    throw\n  }\n  try { Unblock-File -LiteralPath $old } catch {}\n  Remove-Item -LiteralPath $bak -Force -ErrorAction SilentlyContinue\n  Remove-Item -LiteralPath $new -Force -ErrorAction SilentlyContinue\n  Res \"OK $ver\"\n} catch {\n  Res ('ERR ' + ($_.Exception.Message -replace '[\\r\\n]+', ' '))\n}\nStart-Process -FilePath $old -WorkingDirectory (Split-Path -Parent $old)\n";
+const Q70_PY_UPD_DL = "# 4Cast Lab: download the new version (written and started by the app; it can be deleted)\n$ErrorActionPreference = 'Stop'\n$url = {{URL}}\n$out = {{OUT}}\n$status = {{STATUS}}\n$cancel = {{CANCEL}}\n$expect = {{SHA}}\nfunction Say($t) { $tmp = $status + '.tmp'; Set-Content -LiteralPath $tmp -Value $t -Encoding UTF8; Move-Item -LiteralPath $tmp -Destination $status -Force }\n$fs = $null\ntry {\n  try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}\n  Say 'DL 0 0'\n  $req = [Net.HttpWebRequest]::Create($url)\n  $req.UserAgent = '4CastLab-updater'\n  $req.AllowAutoRedirect = $true\n  $res = $req.GetResponse()\n  $total = $res.ContentLength\n  $in = $res.GetResponseStream()\n  $fs = [IO.File]::Create($out)\n  $buf = New-Object byte[] 65536\n  $done = 0\n  $last = [DateTime]::Now\n  while (($n = $in.Read($buf, 0, $buf.Length)) -gt 0) {\n    $fs.Write($buf, 0, $n)\n    $done += $n\n    if (([DateTime]::Now - $last).TotalMilliseconds -gt 400) {\n      $last = [DateTime]::Now\n      Say \"DL $done $total\"\n      if (Test-Path -LiteralPath $cancel) { throw 'CANCELLED' }\n    }\n  }\n  $fs.Close(); $fs = $null; $in.Close(); $res.Close()\n  $h = (Get-FileHash -LiteralPath $out -Algorithm SHA256).Hash.ToLower()\n  if ($h -ne $expect) { Remove-Item -LiteralPath $out -Force -ErrorAction SilentlyContinue; Say \"BAD $h\"; exit }\n  Say \"OK $h $done\"\n} catch {\n  if ($fs) { try { $fs.Close() } catch {} }\n  Remove-Item -LiteralPath $out -Force -ErrorAction SilentlyContinue\n  Say ('ERR ' + ($_.Exception.Message -replace '[\\r\\n]+', ' '))\n}\n";
 /* =====================================================================
    4Cast Lab v5.8 (layer x70), 31 Oct 2026
    ===================================================================== */
@@ -56872,6 +56874,166 @@ function q70Dec(arr, i) {
       return o.apply(this, arguments);
     };
   } catch (e) {}
+})();
+
+/* ---------- J: the .exe updates itself (Download, check, Restart now); the browser version is unchanged ---------- */
+const Q70U = { busy: false, cancel: false, dir: null, ready: null, closing: false };
+function q70UInExe() { try { return v451InExe() && !!(window.web && web.shell && typeof web.shell.command === 'function' && web.files && typeof web.files.writeFileAsBase64 === 'function'); } catch (e) { return false; } }
+function q70UEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
+const q70UPs = s => "'" + String(s).replace(/'/g, "''") + "'";                 // a PowerShell string
+function q70UB64(text) { const u = new TextEncoder().encode(text); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); }
+function q70UFromB64(b) { const bin = atob(b), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new TextDecoder().decode(u).replace(/^﻿/, ''); }
+const q70USh = c => web.shell.command({ command: c, showWindow: false });
+async function q70UDir() {
+  if (Q70U.dir) return Q70U.dir;
+  let base = '';
+  try { base = String(await q70USh('echo %LOCALAPPDATA%') || '').trim().split(/\r?\n/).pop().trim(); } catch (e) {}
+  if (!base || base.indexOf('%') >= 0) { try { base = String(await web.directory.getAppDataDir() || ''); } catch (e) {} }
+  base = base.replace(/[\\/]+$/, '');
+  if (!base) throw new Error('no folder for the download was found');
+  const dir = base + '\\4CastLab\\update';
+  await q70USh(`if not exist "${dir}" mkdir "${dir}"`);
+  return (Q70U.dir = dir);
+}
+async function q70UWrite(path, text) { await web.files.writeFileAsBase64({ filePath: path, data: q70UB64(text) }); }
+async function q70URead(path) { try { const b = await web.files.readFileAsBase64({ filePath: path }); return b ? q70UFromB64(b) : null; } catch (e) { return null; } }
+/* PowerShell in a hidden window that keeps running on its own (the app does not wait for it) */
+async function q70UStart(dir, script) {
+  await q70USh(`powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath powershell -WindowStyle Hidden -WorkingDirectory ${q70UPs(dir)} -ArgumentList '-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File','${script}'"`);
+}
+function q70UFill(tpl, vals) { return '﻿' + tpl.replace(/\{\{(\w+)\}\}/g, (m, k) => q70UPs(vals[k])); }
+/* the latest release: its .exe, the address and the SHA-256 GitHub publishes for it */
+async function q70URelease() {
+  const r = await fetch(UPDATE_API, { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store' });
+  if (!r.ok) throw new Error('GitHub answered ' + r.status);
+  const j = await r.json();
+  const exes = (j.assets || []).filter(a => /\.exe$/i.test(a.name || ''));
+  const a = exes.find(x => /^4\s*cast/i.test(x.name)) || exes[0];
+  if (!a) throw new Error('the release has no .exe');
+  let sha = a.digest && /^sha256:[0-9a-f]{64}$/i.test(a.digest) ? a.digest.slice(7).toLowerCase() : null;
+  if (!sha) { const m = String(j.body || '').match(/\b[0-9A-Fa-f]{64}\b/); if (m) sha = m[0].toLowerCase(); }
+  if (!sha) throw new Error('GitHub gives no SHA-256 for the file');
+  return { tag: j.tag_name || j.name || '', url: a.browser_download_url, size: a.size || 0, sha, page: j.html_url || UPDATE_PAGE };
+}
+function q70UBar(html) { const bar = document.getElementById('updBanner'); if (!bar) return; bar.innerHTML = html; bar.style.display = 'flex'; }
+function q70UMB(b) { return (b / 1048576).toFixed(1); }
+function q70UOpen(url) { try { const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove(); } catch (e) {} }
+function q70UFallback(why, rel) {
+  const url = (rel && rel.page) || UPDATE_PAGE; why = String(why || '').replace(/[.\s]+$/, '');
+  q70UBar(`<span>4Cast Lab could not update itself here: ${q70UEsc(why)}. The download page is open; download the new version there.</span>
+    <a class="upd-btn upd-primary" href="${q70UEsc(url)}" target="_blank" rel="noopener">Open the download page</a>
+    <button type="button" class="upd-btn" onclick="updLater()">Close</button>`);
+  q70UOpen(url);
+}
+async function q70UInstall(test) {
+  if (Q70U.busy) return;
+  try { if (V451.startup) await V451.startup; } catch (e) {}
+  if (!q70UInExe() || !V451.exePath) { q70UOpen(UPDATE_PAGE); return; }
+  Q70U.busy = true; Q70U.cancel = false; Q70U.ready = null;
+  let rel = null;
+  try {
+    q70UBar('<span>Looking for the new version on GitHub…</span>');
+    rel = await q70URelease();
+    if (!test && !updIsNewer(rel.tag, APP_VERSION)) { q70UBar(`<span>This is the latest version (${q70UEsc(APP_VERSION)}).</span><button type="button" class="upd-btn" onclick="updLater()">Close</button>`); return; }
+    const dir = await q70UDir();
+    const out = dir + '\\4Cast.Lab.new.exe', st = dir + '\\status.txt', cancel = dir + '\\cancel.txt';
+    await q70USh(`del /f /q "${st}" "${st}.tmp" "${cancel}" "${out}" 2>nul`);
+    await q70UWrite(dir + '\\download.ps1', q70UFill(Q70_PY_UPD_DL, { URL: rel.url, OUT: out, STATUS: st, CANCEL: cancel, SHA: rel.sha }));
+    q70UProgress(rel, 0, rel.size);
+    await q70UStart(dir, 'download.ps1');
+    const t0 = Date.now(); let lastBytes = -1, lastT = Date.now(), cancelSent = false;
+    for (;;) {
+      await new Promise(r => setTimeout(r, 700));
+      if (Q70U.cancel && !cancelSent) { cancelSent = true; try { await q70UWrite(cancel, 'cancel'); } catch (e) {} }
+      const s = String(await q70URead(st) || '').trim();
+      if (!s) { if (Date.now() - t0 > 45000) throw new Error('the download did not start (PowerShell may be blocked on this computer)'); continue; }
+      const p = s.split(/\s+/);
+      if (p[0] === 'DL') {
+        const done = +p[1] || 0, tot = +p[2] > 0 ? +p[2] : rel.size;
+        if (done !== lastBytes) { lastBytes = done; lastT = Date.now(); } else if (Date.now() - lastT > 90000) throw new Error('the download stopped');
+        if (!Q70U.cancel) q70UProgress(rel, done, tot);
+        continue;
+      }
+      if (p[0] === 'OK') { Q70U.ready = { rel, out, dir }; q70UReadyBar(rel, test); return; }
+      if (p[0] === 'BAD') throw new Error('the downloaded file is not the one published on GitHub (its SHA-256 differs); nothing was changed');
+      if (p[0] === 'ERR') {
+        if (/CANCELLED/.test(s)) { q70UBar('<span>Download cancelled. Nothing was changed.</span><button type="button" class="upd-btn" onclick="updLater()">Close</button>'); return; }
+        throw new Error(s.slice(4) || 'the download failed');
+      }
+    }
+  } catch (e) {
+    q70UFallback(e && e.message ? e.message : String(e), rel);
+  } finally { Q70U.busy = false; }
+}
+function q70UProgress(rel, done, tot) {
+  const pct = tot > 0 ? Math.min(100, Math.round(done / tot * 100)) : 0;
+  q70UBar(`<span>Downloading <b>4Cast Lab ${q70UEsc(rel.tag)}</b>: ${q70UMB(done)} of ${q70UMB(tot)} MB</span>
+    <span style="flex:0 0 160px;height:8px;border-radius:4px;background:var(--border);overflow:hidden;display:inline-block;"><span style="display:block;height:100%;width:${pct}%;background:var(--accent);"></span></span>
+    <button type="button" class="upd-btn" style="margin-left:auto;" onclick="Q70U.cancel=true;this.disabled=true;this.textContent='Cancelling…'">Cancel</button>`);
+}
+function q70UReadyBar(rel, test) {
+  q70UBar(`<span><b>4Cast Lab ${q70UEsc(rel.tag)} is ready</b> (downloaded and checked${test ? '; test: the same version again' : ''}). Save your work, then click <b>Restart now</b>: 4Cast Lab closes, replaces itself and starts again.</span>
+    <button type="button" class="upd-btn upd-primary" onclick="q70URestart()">Restart now</button>
+    <button type="button" class="upd-btn" onclick="updLater()" title="Keep using this version; Download installs the new one later">Later</button>`);
+}
+async function q70URestart() {
+  const R = Q70U.ready; if (!R) return;
+  try {
+    const result = R.dir + '\\result.txt';
+    await q70USh(`del /f /q "${result}" 2>nul`);
+    await q70UWrite(R.dir + '\\apply.ps1', q70UFill(Q70_PY_UPD_APPLY, { OLD: V451.exePath, NEW: R.out, RESULT: result, SHA: R.rel.sha, VER: R.rel.tag }));
+    try { if (typeof v45Autosave === 'function') await v45Autosave(); } catch (e) {}
+    await q70UStart(R.dir, 'apply.ps1');
+    Q70U.closing = true;
+    q70UBar('<span>Restarting 4Cast Lab…</span>');
+    setTimeout(q70UClose, 500);
+  } catch (e) { q70UFallback(e && e.message ? e.message : String(e), R.rel); }
+}
+function q70UClose() {
+  const w = window.web || {};
+  for (const f of [() => w.app && w.app.exit && w.app.exit(), () => w.app && w.app.close && w.app.close(), () => w.app && w.app.quit && w.app.quit(), () => w.window && w.window.close && w.window.close()]) {
+    try { const ok = f(); if (ok !== undefined && ok !== false) return; } catch (e) {}
+  }
+  try { window.close(); } catch (e) {}
+}
+/* no "unsaved changes" question while the app closes for the update (the work is in the automatic copy) */
+window.addEventListener('beforeunload', e => { if (Q70U.closing) e.stopImmediatePropagation(); }, true);
+/* after the restart: say what happened */
+(async function () {
+  try {
+    if (V451.startup) await V451.startup;
+    if (!q70UInExe() || !V451.exePath) return;
+    const dir = await q70UDir(), result = dir + '\\result.txt';
+    const s = String(await q70URead(result) || '').trim();
+    if (!s) return;
+    await q70USh(`del /f /q "${result}" "${dir}\\apply.ps1" "${dir}\\download.ps1" "${dir}\\status.txt" 2>nul`);
+    setTimeout(() => {
+      if (/^OK/.test(s)) showValidationBanner(`4Cast Lab was updated to ${s.slice(3).trim()}. Restore brings back the work that was open.`, 'success');
+      else q70UFallback(s.replace(/^ERR\s*/, '').replace(/[.\s]+$/, '') + ' (this version is unchanged)', null);
+    }, 3500);
+  } catch (e) { console.error('q70 update result', e); }
+})();
+/* Download on the new-version bar and on the About tab; a hidden test (Ctrl+Shift+click on Check now) */
+(function () {
+  try {
+    const o = updShow;
+    updShow = function (info, manual) {
+      const r = o.apply(this, arguments);
+      try {
+        if (!v451InExe()) return r;
+        const bar = document.getElementById('updBanner'), a = bar && bar.querySelector('a.upd-primary');
+        if (a) { const b = document.createElement('button'); b.type = 'button'; b.className = a.className; b.textContent = 'Download'; b.title = 'Download the new version, check it and install it here (after Restart now)'; b.onclick = () => q70UInstall(false); a.replaceWith(b); }
+        const st = document.getElementById('updStatus');
+        if (st && info && updIsNewer(info.tag, APP_VERSION) && !st.querySelector('.q70u-btn')) st.insertAdjacentHTML('beforeend', ' <button type="button" class="btn-secondary q70u-btn" style="width:auto;margin:0 0 0 6px;padding:2px 9px;font-size:12px;" onclick="q70UInstall(false)">Download and install</button>');
+      } catch (e) { console.error('q70 update bar', e); }
+      return r;
+    };
+    const hook = () => {
+      const b = Array.from(document.querySelectorAll('button')).find(x => /checkForUpdate\(true\)/.test(x.getAttribute('onclick') || ''));
+      if (b && !b.__q70u) { b.__q70u = true; b.addEventListener('click', e => { if (e.ctrlKey && e.shiftKey) { e.stopImmediatePropagation(); e.preventDefault(); q70UInstall(true); } }, true); }
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hook); else hook();
+  } catch (e) { console.error('q70 update hooks', e); }
 })();
 
 /* =====================================================================
@@ -58002,6 +58164,7 @@ print(f"\\nLargest relative difference: coefficients {dc:.1e}, standard errors {
     Q51_NEWS.unshift(['5.8', 'November 2026', [
       ['<b>Dynamic panel GMM:</b> Arellano-Bond (difference GMM) and Blundell-Bond (system GMM) in Econometrics mode, one-step or two-step with the Windmeijer correction, collapsed instruments, exogenous, predetermined or endogenous regressors, the AR(1) and AR(2) tests and the Hansen and Sargan tests. The Python script reproduces it with pydynpd.', 'q70gmm', 1],
       ['<b>Quantile, Poisson, negative binomial and Tobit regression</b> in Econometrics mode: several quantiles side by side with OLS and a chart of each coefficient across quantiles; incidence rate ratios, an exposure variable and an overdispersion test for counts; censored data with limits and average marginal effects for Tobit. Each has its Python script (statsmodels, scipy).', 'q70models', 1],
+      ['<b>The .exe updates itself:</b> Download on the new-version bar (or Download and install on the About tab) downloads the new version, checks it against the SHA-256 published on GitHub, and after <b>Restart now</b> puts it in place of the old one and starts it. If that is not possible here, the download page opens as before.', null, 1],
       ['<b>Breusch-Godfrey test</b> in the <b>Compare the lags</b> table (Data tab, Variable Construction): the test of serial correlation that stays valid when lags of the target are predictors. Ljung-Box now uses 12 − (number of lag terms) degrees of freedom, as for ARIMA.', 'q70lags', 1],
       ['<b>Leakage warning for perfect separation:</b> a predictor that alone separates the classes of the target (e.g. Wage for HighWage) is flagged on the Data tab, and after a run when a model reaches a CV AUC of 1.000.', null, 1],
       ['<b>Large data:</b> the automatic copy stores the data in a compact form, and only when they change; restoring it, or opening a large session, is much faster. Large sessions (50,000 rows or more) are saved in the compact form.', null, 1],
