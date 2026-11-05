@@ -3932,7 +3932,10 @@ function safeStd(arr) {
     sumSq += diff * diff;
   }
   let std = Math.sqrt(sumSq / (arr.length - 1));
-  return std === 0 ? 1 : std;
+  // v5.8 fix: a column with the same value in every row gives a std of about
+  // 1e-13 (rounding in the mean), not exactly 0, so the old "=== 0" test missed
+  // it and callers divided by 1e-13. Treat "almost zero" as zero.
+  return (!Number.isFinite(std) || std <= 1e-12 * Math.max(1, Math.abs(m))) ? 1 : std;
 }
 
 function safeMin(arr) {
@@ -6260,15 +6263,26 @@ function applyScaling(X_train, X_val, type) {
   const numFeatures = X_train[0].length;
   const means = [], stds = [], mins = [], maxs = [];
 
+  // v5.8 fix: a predictor with the same value in every training row (e.g. a
+  // yearly macro variable in a CV fold that trains on one year) carries no
+  // information for this fit. It is scaled to 0 in the training AND the
+  // held-out rows, so the model gives it no weight. Before, rounding made its
+  // std about 1e-13 and the held-out rows became values of order 1e12, which
+  // blew up Linear Regression, ANN, KNN and SVM.
+  const constantCols = [];
   for (let j = 0; j < numFeatures; j++) {
     const col = X_train.map(row => row[j]);
     means.push(safeMean(col));
     stds.push(safeStd(col));
     mins.push(safeMin(col));
     maxs.push(safeMax(col));
+    if (!(maxs[j] - mins[j] > 1e-12 * Math.max(1, Math.abs(means[j])))) constantCols.push(j);
   }
+  const isConst = new Array(numFeatures).fill(false);
+  constantCols.forEach(j => { isConst[j] = true; });
 
   const scaleRow = (row) => row.map((val, j) => {
+    if (isConst[j]) return 0;
     if (type === 'zscore') return (val - means[j]) / stds[j];
     if (type === 'minmax01') return (maxs[j] - mins[j]) === 0 ? 0 : (val - mins[j]) / (maxs[j] - mins[j]);
     if (type === 'minmax_neg1_1') return (maxs[j] - mins[j]) === 0 ? 0 : 2 * ((val - mins[j]) / (maxs[j] - mins[j])) - 1;
@@ -6277,6 +6291,7 @@ function applyScaling(X_train, X_val, type) {
 
   const unscaleValue = (j, v) => {
     if (!Number.isFinite(v) || j == null || j < 0 || j >= numFeatures) return v;
+    if (isConst[j]) return means[j];
     if (type === 'zscore') return v * stds[j] + means[j];
     const range = maxs[j] - mins[j];
     if (type === 'minmax01') return range === 0 ? mins[j] : v * range + mins[j];
@@ -6285,7 +6300,7 @@ function applyScaling(X_train, X_val, type) {
   };
 
   return { scaledTrain: X_train.map(scaleRow), scaledVal: X_val.map(scaleRow),
-           scaleRow, unscaleValue, scalingType: type };
+           scaleRow, unscaleValue, scalingType: type, constantCols };
 }
 
 /* Formats a value in a variable's own units for an axis tick or a table cell.
@@ -25247,7 +25262,7 @@ val = df[df["_split"] == "val"].reset_index(drop=True)
 # ---- preprocessing, fitted on the training rows (exactly as 4Cast Lab) ----
 def sd1(a):
     a = np.asarray(a, float); s = np.std(a, ddof=1) if len(a) > 1 else 1.0
-    return 1.0 if s == 0 or not np.isfinite(s) else s
+    return 1.0 if not np.isfinite(s) or s <= 1e-12 * max(1.0, abs(a.mean())) else s
 
 if IMPUTE == "drop":
     train = train.dropna(subset=FEATURES + [TARGET]).reset_index(drop=True)
@@ -25275,8 +25290,9 @@ X_va0, y_va = val[FEATURES].values.astype(float), val[TARGET].values.astype(floa
 def fit_scaler(X):
     mu, sd = X.mean(0), np.array([sd1(X[:, j]) for j in range(X.shape[1])])
     lo, hi = X.min(0), X.max(0); rng = np.where(hi - lo == 0, np.nan, hi - lo)
+    const = ~((hi - lo) > 1e-12 * np.maximum(1.0, np.abs(mu)))   # same value in every training row: scaled to 0
     def f(Z):
-        if SCALING == "zscore": return (Z - mu) / sd
+        if SCALING == "zscore": return np.where(const, 0.0, (Z - mu) / sd)
         if SCALING == "minmax01": return np.nan_to_num((Z - lo) / rng)
         if SCALING == "minmax_neg1_1": return np.nan_to_num(2 * (Z - lo) / rng - 1)
         return Z
@@ -34232,7 +34248,8 @@ function* q50CvFoldBaseG(S) {
   const sc = S.scalingType ? applyScaling(Xtr, Xva, S.scalingType) : { scaledTrain: Xtr, scaledVal: Xva };
   const out = yield* q50PredictG(S.modelType, sc.scaledTrain, ytr, sc.scaledVal, S.params, S.isClassification, S.randFunc);
   const one = S.isClassification && new Set(ytr).size < 2;
-  S.keep.push({ idx: f.valIdx.slice(), y: yva, p: Array.from(out), nTrain: Xtr.length, oneClassTrain: one ? String(ytr[0]) : null });
+  S.keep.push({ idx: f.valIdx.slice(), y: yva, p: Array.from(out), nTrain: Xtr.length, oneClassTrain: one ? String(ytr[0]) : null,
+                constCols: (sc.constantCols && sc.constantCols.length) ? sc.constantCols.slice() : null, nCols: Xtr[0] ? Xtr[0].length : 0 });
 }
 function x47CvFinish(S) {
   const keep = S.keep, opts = S.opts, isClassification = S.isClassification, scheme = S.scheme, nSkipped = S.nSkipped;
@@ -34298,6 +34315,13 @@ v46FoldTableHTML = function (cv, isC, thr, cols) {
     }
     if (isC && f.oneClassTrain !== null && f.oneClassTrain !== undefined)
       warn.push(`Fold ${i + 1}${lab ? ` (${v41Esc(lab)})` : ''} was fitted on rows of one class only (all ${v41Esc(f.oneClassTrain)}), so the model could not learn the other class and its predictions are constant.`);
+    if (f.constCols && f.constCols.length) {
+      // names only when the run's columns are exactly the ticked predictors, in order
+      const fn = (Array.isArray(globalState.features) && globalState.features.length === f.nCols) ? globalState.features : [];
+      const names = f.constCols.map(j => fn[j] || `predictor ${j + 1}`);
+      const shown = names.slice(0, 8).join(', ') + (names.length > 8 ? `, and ${names.length - 8} more` : '');
+      warn.push(`Fold ${i + 1}${lab ? ` (${v41Esc(lab)})` : ''}: ${names.length} predictor${names.length > 1 ? 's had' : ' had'} the same value in every row used to fit (${v41Esc(shown)}), so ${names.length > 1 ? 'they carry' : 'it carries'} no information there and ${names.length > 1 ? 'were' : 'was'} left out of that fold's fit. This is typical of yearly variables, common to all units, in a fold that is fitted on a single year.`);
+    }
   });
   const sm = v46CvSummary(cv, isC, thr);
   const blank = (timed ? '<td></td>' : '') + (hasThr ? '<td></td>' : '');
