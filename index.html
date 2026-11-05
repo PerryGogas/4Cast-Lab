@@ -2267,11 +2267,11 @@ body.dark .x54-learn-ic.qs { background: #475569; }
         <div id="targetContainer" style="display:none;">
           <label class="field-label">Target Column (Y)</label>
           <select id="targetSelect" onchange="onTargetChange()"></select>
-          <label class="field-label" style="margin-top:8px;">Task type<span class="info-hint" title="Automatic: a target with at most 5 distinct values is treated as a classification target (binary classification is supported), otherwise as regression. Choose Regression for a numeric target with few values (a 1-4 rating, a count), or Classification to force a two-class target. Multi-class targets (3 or more classes) are not supported yet.">?</span></label>
+          <label class="field-label" style="margin-top:8px;">Task type<span class="info-hint" title="Automatic: a numeric target with at most 5 distinct values, or a text target with 2 to 20 classes, is treated as a classification target; any other numeric target as regression. Choose Regression for a numeric target with few values (a 1-4 rating, a count), or Classification for a numeric target with 2 to 20 classes (for example class codes 0 to 9). With 3 or more classes the models are multi-class and the predicted class is the one with the highest probability.">?</span></label>
           <select id="taskTypeSelect" onchange="onTargetChange()">
             <option value="auto" selected>Automatic</option>
             <option value="regression">Regression (numeric target)</option>
-            <option value="classification">Classification (two classes)</option>
+            <option value="classification">Classification (2 to 20 classes)</option>
           </select>
           <!-- v4.3: forecast horizon -->
           <div id="horizonBox" class="fc-only" style="margin-top:8px;">
@@ -6644,18 +6644,17 @@ function checkPartitionSizes(nTrain, nVal, embargo, splitStrategy, nTotal) {
   return null;
 }
 
-/* Blocks training on targets with more than 2 classes: this app's
-   confusion matrix, ROC/AUC, and thresholding are implemented for binary
-   classification (and regression) only. Silently continuing would either
-   produce NaN outputs (string class labels) or silently-wrong binary-only
-   metrics (numeric multi-class labels) -- both unacceptable for published
-   results, so we stop and say so clearly instead. */
+/* Binary-path guard. Targets with 3 to 20 classes never reach it: since
+   v4.8 runPipeline / runTrainAll hand them to the multi-class layer (x48Run)
+   first. What still arrives here with more than 2 classes (for example more
+   than 20 classes) would give silently-wrong binary metrics, so we stop and
+   say so clearly instead. */
 function validateBinaryOrRegression(yVals, isClassification) {
   if (!isClassification) return null;
   const uniqueVals = Array.from(new Set(yVals));
   if (uniqueVals.length > 2) {
     const preview = uniqueVals.slice(0, 6).map(v => String(v)).join(', ') + (uniqueVals.length > 6 ? ', …' : '');
-    return `This target has ${uniqueVals.length} classes (${preview}). 4Cast Lab's models and metrics (confusion matrix, ROC/AUC, thresholding) are implemented for BINARY classification and regression only -- multi-class targets are not yet supported and would otherwise silently produce incorrect results. Please choose a target with exactly two classes, or recode it into a binary indicator. If the values are numbers meant as a numeric scale (a 1-4 rating, a count), set Task type to Regression under the Target Column.`;
+    return `This target has ${uniqueVals.length} classes (${preview}). Classification in 4Cast Lab supports targets with 2 to 20 classes. Please recode the target into at most 20 classes. If the values are numbers meant as a numeric scale (a rating, a count), set Task type to Regression under the Target Column.`;
   }
   return null;
 }
@@ -20200,7 +20199,7 @@ const V41_HELP = [
   { title: 'Observations and variables', cat: 'Data', ids: ['dataDimensionBox'],
     text: 'Observations are the rows of the dataset (after constructed variables have trimmed any leading rows); variables are its columns.' },
   { title: 'Target column (Y)', cat: 'Data', ids: ['targetSelect'], terms: ['target column', 'dependent variable (y)'],
-    text: 'The variable to be predicted (Forecasting mode) or explained (Estimation mode). A target with at most five distinct values is treated as a classification problem, otherwise as regression. Only binary classification is supported.' },
+    text: 'The variable to be predicted (Forecasting mode) or explained (Estimation mode). A numeric target with at most five distinct values, or a text target, is treated as a classification problem, otherwise as regression; Task type can override this. Binary and multi-class targets (2 to 20 classes) are supported: see Multi-class classification.' },
   { title: 'Positive class', cat: 'Data', ids: ['positiveClassSelect'], terms: ['positive class'],
     text: 'Which of the two labels is coded 1. Sensitivity, precision, F1 and the confusion matrix all refer to this class, so choose the outcome you care about detecting (default, disease, recession).' },
   { title: 'Meta, ID and date variables', cat: 'Data', ids: ['metaVarChecklist'], terms: ['meta / id / date'],
