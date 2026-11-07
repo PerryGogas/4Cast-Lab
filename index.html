@@ -3214,9 +3214,15 @@ body.dark .x54-learn-ic.qs { background: #475569; }
               <div class="x49-more-grid">
                 <a class="x49-app" href="https://www.youtube.com/playlist?list=PLfIotCXrK6uc" target="_blank" rel="noopener"><span class="x54-learn-ic yt"><svg viewBox="0 0 24 24"><path d="M9 7.5v9l7.5-4.5z"/></svg></span>
                   <span class="x49-app-t"><b>Quick-start videos</b><span>Short videos on YouTube: Machine Learning, Econometrics, AutoML and the Python Workbench.</span></span></a>
-                <a class="x49-app" href="https://github.com/PerryGogas/4Cast-Lab/releases/download/v5.0/4CastLab_Quick_Start_Guide.pdf" target="_blank" rel="noopener"><span class="x54-learn-ic qs"><svg viewBox="0 0 24 24"><path d="M12 3 4 8l8 5 8-5z"/><path d="M4 13l8 5 8-5"/></svg></span>
-                  <span class="x49-app-t"><b>Quick Start Guide (PDF)</b><span>Your first model in a few pages, step by step.</span></span></a>
-                <a class="x49-app" href="https://github.com/PerryGogas/4Cast-Lab/releases/download/v5.0/4Cast_Lab_User_Manual.pdf" target="_blank" rel="noopener"><span class="x54-learn-ic man"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M8 7h7M8 11h7"/></svg></span>
+                <a class="x49-app" href="https://github.com/PerryGogas/4Cast-Lab/releases/latest/download/Your_First_Model.pdf" target="_blank" rel="noopener"><span class="x54-learn-ic qs"><svg viewBox="0 0 24 24"><path d="M5 19V5l7 4 7-4v14l-7-4z"/></svg></span>
+                  <span class="x49-app-t"><b>Your First Model (PDF)</b><span>Three short step-by-step guides: classification, regression and AutoML. Start here.</span></span></a>
+                <a class="x49-app" href="https://github.com/PerryGogas/4Cast-Lab/releases/latest/download/4CastLab_Quick_Start_Guide.pdf" target="_blank" rel="noopener"><span class="x54-learn-ic qs"><svg viewBox="0 0 24 24"><path d="M12 3 4 8l8 5 8-5z"/><path d="M4 13l8 5 8-5"/></svg></span>
+                  <span class="x49-app-t"><b>Quick Start Guide (PDF)</b><span>A model in about five minutes, then econometrics, AutoML and the Python Workbench.</span></span></a>
+                <a class="x49-app" href="https://github.com/PerryGogas/4Cast-Lab/releases/latest/download/4Cast_Lab_Features.pdf" target="_blank" rel="noopener"><span class="x54-learn-ic man"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></span>
+                  <span class="x49-app-t"><b>4Cast Lab Features (PDF)</b><span>What the app can do, on four pages.</span></span></a>
+                <a class="x49-app" href="https://github.com/PerryGogas/4Cast-Lab/releases/latest/download/4CastLab_Model_Selection_Guide.pdf" target="_blank" rel="noopener"><span class="x54-learn-ic qs"><svg viewBox="0 0 24 24"><path d="M4 20h16M7 16V9M12 16V5M17 16v-4"/></svg></span>
+                  <span class="x49-app-t"><b>Selecting the Best Model (PDF)</b><span>Choosing the best model honestly with Train All, cross-validation and the Test Set.</span></span></a>
+                <a class="x49-app" href="https://github.com/PerryGogas/4Cast-Lab/releases/latest/download/4Cast_Lab_User_Manual.pdf" target="_blank" rel="noopener"><span class="x54-learn-ic man"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M8 7h7M8 11h7"/></svg></span>
                   <span class="x49-app-t"><b>User Manual (PDF)</b><span>Every panel, method and setting, explained.</span></span></a>
               </div>
             </div>
@@ -8070,7 +8076,7 @@ function runPipeline() {
   features = Array.from(checkboxes).map(cb => cb.value).filter(f => !isMetaVariable(f, []));
 
   if (features.length === 0 && !horizonSettings().includeYt) {
-    showValidationBanner("Please select at least one numeric feature for training!");
+    showValidationBanner("Tick at least one predictor in 3 Features.");
     return;
   }
 
@@ -8317,7 +8323,7 @@ function runTrainAll() {
   features = Array.from(checkboxes).map(cb => cb.value).filter(f => !isMetaVariable(f, []));
 
   if (features.length === 0 && !horizonSettings().includeYt) {
-    showValidationBanner("Please select at least one numeric feature for training!");
+    showValidationBanner("Tick at least one predictor in 3 Features.");
     return;
   }
 
@@ -12117,13 +12123,21 @@ function renderTimeIntegrity() {
         const keep = xv0.map((v, i) => Number.isFinite(v) && Number.isFinite(yv[i]) ? i : -1).filter(i => i >= 0);
         if (keep.length < 3) return;
         const r = safeCorr(keep.map(i => xv0[i]), keep.map(i => yv[i]));
-        if (Number.isFinite(r) && Math.abs(r) > 0.98) leak.push(`${c} (r = ${r.toFixed(4)})`);
+        if (Number.isFinite(r) && Math.abs(r) > 0.98) { leak.push(`${c} (r = ${r.toFixed(4)})`); return; }
+        // after-v5.8 C10: a 0/1 column that is the target above (or below) a cut-off, e.g. HighWage = Wage > 11.03
+        try {
+          const xk = keep.map(i => xv0[i]), yk = keep.map(i => yv[i]), ux = Array.from(new Set(xk));
+          if (ux.length === 2 && new Set(yk).size > 2 && typeof v45StepAgreement === 'function') {
+            const lo = Math.min(ux[0], ux[1]), ag = v45StepAgreement(xk.map(v => v === lo ? 0 : 1), yk);
+            if (ag >= 0.95) leak.push(`${c} (almost equals ${tcol} above or below a cut-off; Cohen's kappa ${ag.toFixed(3)})`);
+          }
+        } catch (e) {}
       });
     }
   }
   try { q70SepIssues(cols, tcol, issues); } catch (e) { console.error('q70 sep', e); }
   if (leak.length) {
-    issues.push(`<b>Possible target leakage.</b> ${leak.join(', ')} correlate with <b>${tcol}</b> above 0.98. A predictor that close to the target is usually a transform of it, a copy of it, or something recorded after it is known.`);
+    issues.push(`<b>Possible target leakage.</b> ${leak.join(', ')}: ${leak.length > 1 ? 'these are' : 'this is'} too close to <b>${tcol}</b>. A predictor that close to the target is usually a transform of it, a copy of it, or something recorded after it is known.`);
   }
 
   timeIndexInfo = info;
@@ -36645,7 +36659,7 @@ function x48Run(all) {
   targetCol = document.getElementById('targetSelect').value;
   features = Array.from(document.querySelectorAll('.feature-checkbox:checked')).map(cb => cb.value).filter(f => !isMetaVariable(f, []));
   const hz = horizonSettings();
-  if (features.length === 0 && !hz.includeYt) { showValidationBanner('Please select at least one numeric feature for training!'); return; }
+  if (features.length === 0 && !hz.includeYt) { showValidationBanner('Tick at least one predictor in 3 Features.'); return; }
   const hzRes = applyHorizon(encodeCategoricalsAndTarget(rawData, targetCol), targetCol, hz);
   const encFull = hzRes.rows;
   // y(t) as a predictor: one 0/1 column per class except the first (the class code itself has no order)
@@ -37014,7 +37028,7 @@ function x48RenderSettings(run) {
   add('Metric for tuning and selection', x48E(X48_SEL.find(s => s[0] === S.selKey)[1].replace(' (default)', '')));
   if (S.all) add('Chosen hyperparameters', run.results.map(R => `<b>${x48E(R.label)}</b>: ${x48E(paramsToText(R.params))}`).join('<br>'));
   else { const R = run.results[0]; add('Algorithm', `${x48E(R.label)} (${X48_HOW[R.al.id]})`); add('Chosen hyperparameters', x48E(paramsToText(R.params))); }
-  add('Multi-class method', run.results.map(R => R.al.id).filter((v, i, a) => a.indexOf(v) === i).map(id => `${x48E(v41AlgoLabel(id, true))}: ${X48_HOW[id]}`).join('; '));
+  add('Multi-class method', run.results.filter((R, i, a) => a.findIndex(Q => (Q.al.key || Q.al.id) === (R.al.key || R.al.id)) === i).map(R => `${x48E(R.label || v41AlgoLabel(R.al.id, true))}: ${X48_HOW[R.al.id]}`).join('; '));   // after-v5.8 C13: every SVM kernel listed
   add('Decision rule', 'the class with the highest probability');
   add('Class imbalance', { none: 'None', weights: 'Class weights (balanced, per class)', under: 'Random undersampling to the smallest class', over: 'Random oversampling to the largest class', smote: 'SMOTE (k = 5), every class up to the largest' }[S.imb] || S.imb);
   el.innerHTML = `<div class="table-container"><table class="metrics-table x48-kv"><tbody>${rows.join('')}</tbody></table></div>`;
@@ -41447,7 +41461,11 @@ function x50SelectOn(X, y, task, methods, ordered) {
       const a = []; for (let c = 0; c < task.k; c++) { const yc = y.map(v => v === c ? 1 : 0); if (new Set(yc).size < 2) continue; const u = calculateROCAUC(yc, x); if (Number.isFinite(u)) a.push(Math.max(u, 1 - u)); }
       s = x50Mean(a);
     } else if (task === 'bin') { const u = calculateROCAUC(y, x); s = Number.isFinite(u) ? Math.max(u, 1 - u) : NaN; }
-    else { const r = pairCorr(x, y).r; s = Math.abs(r); }
+    else {
+      const r = pairCorr(x, y).r; s = Math.abs(r);
+      // after-v5.8 C10: a 0/1 predictor that is the target above (or below) a cut-off (HighWage = Wage > 11.03)
+      if (!(s > 0.95)) { try { const u = Array.from(new Set(x)); if (u.length === 2 && typeof v45StepAgreement === 'function') { const lo = Math.min(u[0], u[1]); const ag = v45StepAgreement(x.map(v => v === lo ? 0 : 1), y); if (Number.isFinite(ag) && ag >= 0.95) s = ag; } } catch (e) {} }
+    }
     if (Number.isFinite(s) && s > 0.95) leak.push(j);
   });
   // when every usable predictor is flagged, none is removed (they are kept, with a warning)
@@ -42240,12 +42258,12 @@ function x50Summarize(cfg, fixes) {
   out.methods = A.methods || [];
   if (sel && sel.leakKept && sel.leakKept.length) {
     const nm = sel.leakKept.map(j => S.feats[j]);
-    out.fixes.push({ k: 'leakKept', html: `${nm.map(f => `<b>${x50Esc(x50Pretty(f))}</b>`).join(', ')} predict${nm.length > 1 ? '' : 's'} ${x50Esc(st.targetName)} almost perfectly on ${nm.length > 1 ? 'their' : 'its'} own (${kind === 'reg' ? '|r| > 0.95' : 'AUC > 0.95'}). This can mean ${nm.length > 1 ? 'they were' : 'it was'} recorded after the outcome (leakage); check that. ${nm.length > 1 ? 'They were' : 'It was'} kept, because ${nm.length > 1 ? 'they are' : 'it is'} the only predictor${nm.length > 1 ? 's' : ''}.` });
+    out.fixes.push({ k: 'leakKept', html: `${nm.map(f => `<b>${x50Esc(x50Pretty(f))}</b>`).join(', ')} predict${nm.length > 1 ? '' : 's'} ${x50Esc(st.targetName)} almost perfectly on ${nm.length > 1 ? 'their' : 'its'} own (${kind === 'reg' ? '|r| > 0.95, or the target above a cut-off' : 'AUC > 0.95'}). This can mean ${nm.length > 1 ? 'they were' : 'it was'} recorded after the outcome (leakage); check that. ${nm.length > 1 ? 'They were' : 'It was'} kept, because ${nm.length > 1 ? 'they are' : 'it is'} the only predictor${nm.length > 1 ? 's' : ''}.` });
   }
   if (sel && sel.leak && sel.leak.length) {
     const nm = sel.leak.map(j => S.feats[j]);
     const what = nm.map(f => `<b>${x50Esc(x50Pretty(f))}</b>`).join(', ');
-    out.fixes.push({ k: 'leak', html: `${what} predict${nm.length > 1 ? '' : 's'} ${x50Esc(st.targetName)} almost perfectly on ${nm.length > 1 ? 'their' : 'its'} own (${kind === 'reg' ? '|r| > 0.95' : 'AUC > 0.95'}), which usually means ${nm.length > 1 ? 'they were' : 'it was'} recorded after the outcome (leakage). ${nm.length > 1 ? 'They were' : 'It was'} removed.` });
+    out.fixes.push({ k: 'leak', html: `${what} predict${nm.length > 1 ? '' : 's'} ${x50Esc(st.targetName)} almost perfectly on ${nm.length > 1 ? 'their' : 'its'} own (${kind === 'reg' ? '|r| > 0.95, or the target above a cut-off' : 'AUC > 0.95'}), which usually means ${nm.length > 1 ? 'they were' : 'it was'} recorded after the outcome (leakage). ${nm.length > 1 ? 'They were' : 'It was'} removed.` });
   }
   // importance
   try { out.top = x50Importance(S, kind).slice(0, 5).map(o => ({ label: o.label, name: o.name, rel: o.rel, imp: o.imp, dir: o.dir })); } catch (e) { console.error('x50 importance', e); out.top = []; }
@@ -58384,6 +58402,131 @@ function a58AutoBand() {
   if (u && u.parentElement === R) R.insertBefore(d, u.nextSibling); else R.insertBefore(d, R.firstChild);
 }
 window.addEventListener('load', () => setTimeout(() => { try { a58AutoBand(); } catch (e) { console.error('automl band', e); } }, 300));
+</script>
+
+<style id="x72-style">
+/* after v5.8, second build (layer x72), Perry 7 Nov 2026: spec items 10, 12, 15, 17 */
+.a58-try { display:flex; align-items:center; gap:8px; margin:10px 0 0; font-size:13px; color:var(--muted); }
+.a58-try button { width:auto !important; margin:0 !important; padding:4px 12px !important; border-radius:999px !important; border:1px solid var(--accent) !important; background:transparent !important; color:var(--accent) !important; font-weight:600; font-size:12.5px !important; cursor:pointer; }
+.a58-try button:hover { background:var(--accent) !important; color:var(--on-accent, #fff) !important; }
+#a58PresetNote { display:none; margin:0 0 12px; padding:12px 16px; border:1px solid var(--accent); border-left-width:4px; border-radius:10px; background:var(--card); font-size:13px; line-height:1.5; }
+#a58PresetNote.on { display:block; }
+#a58PresetNote button { width:auto !important; margin:8px 0 0 !important; padding:6px 14px !important; border-radius:8px !important; font-weight:600; background:var(--navy) !important; color:var(--on-navy) !important; border:1px solid var(--navy) !important; cursor:pointer; }
+body.view-automl #a58PresetNote { display:none !important; }
+</style>
+<script id="x72-layer">
+/* ---------- C10: Wages preset, the target and its 0/1 cut are never both in the model ---------- */
+function a58WageTicks() {
+  try {
+    if (!rawData || !rawData.length || !('Wage' in rawData[0]) || !('HighWage' in rawData[0])) return;
+    if ((document.getElementById('datasetSelect') || {}).value !== 'preset_wage') return;
+    const t = (document.getElementById('targetSelect') || {}).value;
+    const off = t === 'Wage' ? 'HighWage' : (t === 'HighWage' ? 'Wage' : null);
+    if (!off) return;
+    const cb = Array.from(document.querySelectorAll('.feature-checkbox')).find(c => c.value === off);
+    if (cb && cb.checked) { cb.checked = false; cb.dispatchEvent(new Event('change', { bubbles: true })); }
+  } catch (e) { console.error('wage ticks', e); }
+}
+function a58AfterData() {
+  a58WageTicks();
+  try { if (typeof v45LeakageCheck === 'function') v45LeakageCheck(); } catch (e) {}   // the leakage flags show at once, not only after a tick changes
+  try { a58PresetNote(); } catch (e) {}
+}
+(function () {
+  const oD = handleDatasetChange;
+  handleDatasetChange = function () { const r = oD.apply(this, arguments); setTimeout(a58AfterData, 200); return r; };
+  const oT = onTargetChange;
+  onTargetChange = function () { const r = oT.apply(this, arguments); setTimeout(a58AfterData, 0); return r; };
+  const oM = setAppMode;
+  setAppMode = function () { const r = oM.apply(this, arguments); setTimeout(() => { try { a58PresetNote(); } catch (e) {} }, 50); return r; };
+})();
+
+/* ---------- C12: panel / DiD presets opened in Forecasting mode ---------- */
+const A58_PRESET_NOTES = {
+  preset_minwage: { cols: ['Region', 'TeenEmp'], est: 'did',
+    text: '<b>This dataset is set up for Estimation mode.</b> Minimum wage is a difference-in-differences example: in Estimation mode, <b>Difference-in-differences</b> estimates the effect of raising the minimum wage on teen employment. Forecasting mode needs predictors ticked in 3 Features.' },
+  preset_grunfeld: { cols: ['Firm', 'invest'], est: 'panel_fe',
+    text: '<b>This dataset is set up for Estimation mode.</b> Grunfeld is a panel of 10 firms over 20 years: in Estimation mode, <b>Fixed effects (within)</b> estimates how investment responds to firm value and capital. In Forecasting mode the Random Sampling Split mixes firms and years in the training rows and the Test Set.' }
+};
+function a58PresetNote() {
+  const tab = document.getElementById('tabData'); if (!tab) return;
+  let n = document.getElementById('a58PresetNote');
+  if (!n) { n = document.createElement('div'); n.id = 'a58PresetNote'; n.className = 'no-print'; tab.insertBefore(n, tab.firstChild); }
+  const v = (document.getElementById('datasetSelect') || {}).value, P = A58_PRESET_NOTES[v];
+  const show = !!(P && typeof appMode !== 'undefined' && appMode === 'forecast' && rawData && rawData.length && P.cols.every(c => c in rawData[0]));
+  n.classList.toggle('on', show);
+  if (!show) { n.innerHTML = ''; return; }
+  n.innerHTML = `${P.text}<br><button type="button" id="a58ToEst">Open in Estimation mode</button>`;
+  n.querySelector('#a58ToEst').onclick = () => {
+    try { setAppMode('estimation'); } catch (e) { console.error(e); }
+    setTimeout(() => { try { const e = document.getElementById('estEstimator'); if (e && e.value !== P.est) { e.value = P.est; e.dispatchEvent(new Event('change')); } } catch (er) {} }, 300);
+  };
+}
+
+/* ---------- D15: "Try an example" on the welcome screen ---------- */
+function a58Sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+async function a58TryExample() {
+  a58WelcomeClose();
+  try { w44SetView('automl'); } catch (e) { console.error(e); return; }
+  await a58Sleep(400);
+  const ex = document.getElementById('x50Example');
+  const o = ex && Array.from(ex.options).find(x => /Credit Default/.test(x.text));
+  if (!o) return;
+  ex.value = o.value; ex.dispatchEvent(new Event('change'));
+  for (let i = 0; i < 40; i++) {                         // wait until the data and the target are in
+    await a58Sleep(150);
+    const t = document.getElementById('x50Target');
+    if (rawData && rawData.length && 'Default' in rawData[0] && t && t.value === 'Default') break;
+  }
+  await a58Sleep(300);
+  try { if (typeof x50SetEffort === 'function') x50SetEffort('fast'); } catch (e) {}
+  await a58Sleep(300);
+  const run = document.querySelector('#x50Wiz .x50-run'); if (run && !run.disabled) run.click();
+}
+(function () {
+  const o = a58WelcomeOpen;
+  a58WelcomeOpen = function () {
+    const r = o.apply(this, arguments);
+    try {
+      const g = document.querySelector('#a58Welcome .a58-choices'); if (!g) return r;
+      const d = document.createElement('div'); d.className = 'a58-try';
+      d.innerHTML = '<button type="button" id="a58TryBtn">▶ Try an example</button><span>AutoML on the Credit Default data, about 10 seconds.</span>';
+      g.insertAdjacentElement('afterend', d);
+      d.querySelector('#a58TryBtn').onclick = a58TryExample;
+    } catch (e) { console.error('try example', e); }
+    return r;
+  };
+})();
+
+/* ---------- D17: What's new for the 7 Nov update (the version stays 5.8) ---------- */
+const A58_NEWS_KEY = '4castlab.news.5.8-2026-11-07';
+const A58_SEEN0 = (() => { try { return localStorage.getItem(Q51_SEEN_KEY); } catch (e) { return null; } })();
+try {
+  Q51_SHOW.a58wel = () => { try { a58WelcomeOpen(); } catch (e) {} };
+  Q51_SHOW.a58auto = () => { try { w44SetView('automl'); } catch (e) {} };
+  Q51_NEWS.unshift(['5.8', '7 November 2026 update', [
+    ['<b>Welcome screen:</b> three ways to start (AutoML, Core, Expert), a one-click example, and the guides (Your First Model, Quick Start Guide, Features, Selecting the Best Model, User Manual). Tick "Don\'t show this again" to skip it; <b>Help (?) > Welcome and guides</b> brings it back.', 'a58wel', 1],
+    ['<b>A cleaner AutoML view:</b> only Core / Expert / AutoML, the settings, the theme and Help stay at the top, with a large AutoML title; the settings panel scrolls on small screens.', 'a58auto', 1],
+    ['<b>Forecasts tab:</b> the Out-of-Sample Forecasting card now works after Train All and AutoML, and says "Train a model first" before.', null, 1],
+    ['<b>Leakage:</b> a 0/1 predictor that is the target above a cut-off (e.g. HighWage for Wage) is flagged on the Data tab and in 3 Features, and AutoML leaves it out.', null, 1],
+    ['<b>FDIC bank data:</b> the bank code column is now <b>FDIC_cert</b>, and names show state and certificate, e.g. "First National Bank (TX, 3510)", so banks that share a name are told apart.', null, 1],
+    ['<b>Smaller fixes:</b> the Full Report names the tuning used by Train All; AutoML ends with "AutoML finished"; help texts say 2 to 20 classes; the Estimation settings no longer show Forecasting-only options.', null, 1]
+  ]]);
+} catch (e) { console.error('a58 news', e); }
+window.addEventListener('load', () => setTimeout(() => {
+  try {
+    let done = null; try { done = localStorage.getItem(A58_NEWS_KEY); } catch (e) {}
+    if (done) return;
+    const mark = () => { try { localStorage.setItem(A58_NEWS_KEY, '1'); } catch (e) {} };
+    // users who already saw the v5.8 notes see this update once; everyone else gets it through the usual What's new
+    if (!(A58_SEEN0 === APP_VERSION && Q51_HAD_SETTINGS)) { mark(); return; }
+    const go = (k) => {
+      if (k < 120 && (document.querySelector('[aria-modal="true"], #v462TourBox') || (typeof Q51 !== 'undefined' && Q51.imp))) { setTimeout(() => go(k + 1), 1500); return; }
+      mark(); try { q51NewsOpen(); } catch (e) {}
+    };
+    go(0);
+  } catch (e) {}
+}, 4600));
 </script>
 
 </body>
