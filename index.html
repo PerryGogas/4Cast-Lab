@@ -58258,6 +58258,8 @@ body.view-automl .v452-zoom,
 body.view-automl .x47-lpclose,
 body.view-automl #q60UndoBar,
 body.view-automl #v45FeatUndo { display:none !important; }
+/* the AutoML wizard scrolls inside the settings panel when it is taller than the window (Perry, 7 Nov 2026) */
+body.view-automl #x50Wiz { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
 #a58AutoBand { display:none; }
 html body.view-automl #v452Right > #a58AutoBand:not(#x50Sum):not(#updBanner) { display:flex !important; }
 #a58AutoBand { align-items:center; gap:14px; margin:0 0 12px; padding:14px 20px; border-radius:12px; background:var(--navy); color:var(--on-navy, #fff); }
