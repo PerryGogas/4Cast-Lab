@@ -2267,11 +2267,11 @@ body.dark .x54-learn-ic.qs { background: #475569; }
         <div id="targetContainer" style="display:none;">
           <label class="field-label">Target Column (Y)</label>
           <select id="targetSelect" onchange="onTargetChange()"></select>
-          <label class="field-label" style="margin-top:8px;">Task type<span class="info-hint" title="Automatic: a target with at most 5 distinct values is treated as a classification target (binary classification is supported), otherwise as regression. Choose Regression for a numeric target with few values (a 1-4 rating, a count), or Classification to force a two-class target. Multi-class targets (3 or more classes) are not supported yet.">?</span></label>
+          <label class="field-label" style="margin-top:8px;">Task type<span class="info-hint" title="Automatic: a numeric target with at most 5 distinct values, or a text target with 2 to 20 classes, is treated as a classification target; any other numeric target as regression. Choose Regression for a numeric target with few values (a 1-4 rating, a count), or Classification for a numeric target with 2 to 20 classes (for example class codes 0 to 9). With 3 or more classes the models are multi-class and the predicted class is the one with the highest probability.">?</span></label>
           <select id="taskTypeSelect" onchange="onTargetChange()">
             <option value="auto" selected>Automatic</option>
             <option value="regression">Regression (numeric target)</option>
-            <option value="classification">Classification (two classes)</option>
+            <option value="classification">Classification (2 to 20 classes)</option>
           </select>
           <!-- v4.3: forecast horizon -->
           <div id="horizonBox" class="fc-only" style="margin-top:8px;">
@@ -2529,7 +2529,7 @@ body.dark .x54-learn-ic.qs { background: #475569; }
 
         <button onclick="runPipeline()">Train Selected Model</button>
         <button class="btn-success" onclick="runTrainAll()">Train All Models & Compare</button>
-        <button class="btn-secondary" onclick="downloadAllFigures()">Download All Figures (2× resolution)</button>
+        <button class="btn-secondary fc-only" onclick="downloadAllFigures()">Download All Figures (2× resolution)</button>
         <div style="font-size:11px; color:var(--muted); margin-top:10px; padding:8px; background:#f8fafc; border:1px solid var(--border); border-radius:6px;">
           The Full Report and the Methods Report are in the <b>Analysis Reports</b> tab, where both can be read on screen before printing.
         </div>
@@ -2686,6 +2686,7 @@ body.dark .x54-learn-ic.qs { background: #475569; }
       <div class="card" id="inferenceCard" style="display:none;">
         <h3>Out-of-Sample Forecasting</h3>
         <label>Upload New Data (.xlsx / .xls / .csv) for Prediction</label>
+        <div id="a58InfNote" class="a58-inf-note" style="display:none;">Train a model first (<b>Train Selected Model</b>, <b>Train All Models &amp; Compare</b> or AutoML). Then upload new data here to get forecasts.</div>
         <input type="file" id="inferenceFileInput" accept=".xlsx, .xls, .csv" onchange="handleInferenceFileUpload(event)">
         <div id="inferenceOutputContainer" style="margin-top: 10px;"></div>
       </div>
@@ -4869,7 +4870,7 @@ function clearPreviousOutputs() {
   document.getElementById('pdpFeatureSelect').innerHTML = '';
   document.getElementById('inspectXSelect').innerHTML = '';
   document.getElementById('inspectYSelect').innerHTML = '';
-  document.getElementById('inferenceCard').style.display = 'none';
+  try { a58InfState(false); } catch (e) { document.getElementById('inferenceCard').style.display = 'none'; }   // after-v5.8 A5: visible, with "Train a model first"
   document.getElementById('inferenceOutputContainer').innerHTML = '';
   const fb = document.getElementById('ensembleFocusContainer'); if (fb) fb.style.display = 'none';
   const hn = document.getElementById('ensembleHiddenNote'); if (hn) { hn.style.display = 'none'; hn.innerHTML = ''; }
@@ -6644,18 +6645,17 @@ function checkPartitionSizes(nTrain, nVal, embargo, splitStrategy, nTotal) {
   return null;
 }
 
-/* Blocks training on targets with more than 2 classes: this app's
-   confusion matrix, ROC/AUC, and thresholding are implemented for binary
-   classification (and regression) only. Silently continuing would either
-   produce NaN outputs (string class labels) or silently-wrong binary-only
-   metrics (numeric multi-class labels) -- both unacceptable for published
-   results, so we stop and say so clearly instead. */
+/* Binary-path guard. Targets with 3 to 20 classes never reach it: since
+   v4.8 runPipeline / runTrainAll hand them to the multi-class layer (x48Run)
+   first. What still arrives here with more than 2 classes (for example more
+   than 20 classes) would give silently-wrong binary metrics, so we stop and
+   say so clearly instead. */
 function validateBinaryOrRegression(yVals, isClassification) {
   if (!isClassification) return null;
   const uniqueVals = Array.from(new Set(yVals));
   if (uniqueVals.length > 2) {
     const preview = uniqueVals.slice(0, 6).map(v => String(v)).join(', ') + (uniqueVals.length > 6 ? ', …' : '');
-    return `This target has ${uniqueVals.length} classes (${preview}). 4Cast Lab's models and metrics (confusion matrix, ROC/AUC, thresholding) are implemented for BINARY classification and regression only -- multi-class targets are not yet supported and would otherwise silently produce incorrect results. Please choose a target with exactly two classes, or recode it into a binary indicator. If the values are numbers meant as a numeric scale (a 1-4 rating, a count), set Task type to Regression under the Target Column.`;
+    return `This target has ${uniqueVals.length} classes (${preview}). Classification in 4Cast Lab supports targets with 2 to 20 classes. Please recode the target into at most 20 classes. If the values are numbers meant as a numeric scale (a rating, a count), set Task type to Regression under the Target Column.`;
   }
   return null;
 }
@@ -15973,9 +15973,12 @@ function aiAlgorithmName(st) {
     else name += ` (${k} kernel)`;
   }
   if (st.showingEnsemble) {
+    // after-v5.8 A6: name the Hyperparameters setting actually used (as Settings of This Run does)
+    const hm = (st.tunedEnsemble === false) ? 'default' : (st.hpMode || 'default');
+    const how = { default: 'at their default settings', quick: ', each with quick tuning of its hyperparameters', full: ', each with full tuning of its hyperparameters' }[hm] || 'at their default settings';
     name = st.focusAlgoLabel
-      ? `${st.focusAlgoLabel} (selected from a comparison of all algorithms at their default settings)`
-      : 'a comparison of all available algorithms at their default settings';
+      ? `${st.focusAlgoLabel} (selected from a comparison of all algorithms${how[0] === ',' ? '' : ' '}${how})`
+      : `a comparison of all available algorithms${how[0] === ',' ? '' : ' '}${how}`;
   }
   return name;
 }
@@ -20200,7 +20203,7 @@ const V41_HELP = [
   { title: 'Observations and variables', cat: 'Data', ids: ['dataDimensionBox'],
     text: 'Observations are the rows of the dataset (after constructed variables have trimmed any leading rows); variables are its columns.' },
   { title: 'Target column (Y)', cat: 'Data', ids: ['targetSelect'], terms: ['target column', 'dependent variable (y)'],
-    text: 'The variable to be predicted (Forecasting mode) or explained (Estimation mode). A target with at most five distinct values is treated as a classification problem, otherwise as regression. Only binary classification is supported.' },
+    text: 'The variable to be predicted (Forecasting mode) or explained (Estimation mode). A numeric target with at most five distinct values, or a text target, is treated as a classification problem, otherwise as regression; Task type can override this. Binary and multi-class targets (2 to 20 classes) are supported: see Multi-class classification.' },
   { title: 'Positive class', cat: 'Data', ids: ['positiveClassSelect'], terms: ['positive class'],
     text: 'Which of the two labels is coded 1. Sensitivity, precision, F1 and the confusion matrix all refer to this class, so choose the outcome you care about detecting (default, disease, recession).' },
   { title: 'Meta, ID and date variables', cat: 'Data', ids: ['metaVarChecklist'], terms: ['meta / id / date'],
@@ -46877,7 +46880,7 @@ function q50StopNow() {
         Q50.cur = null;
         if (kind === 'all' && !cancelled && !J.err) {
           // the explanation tabs follow as their own job; the message comes at the end of both
-          Q50.pendAll = { t0: J.t0, partial: Q50.partial, btn: J.btn, stopReq: J.stopReq, tab: J.tab };
+          Q50.pendAll = { t0: J.t0, partial: Q50.partial, btn: J.btn, stopReq: J.stopReq, tab: J.tab, automl: !!(typeof X50 !== 'undefined' && X50.running) };   // (after-v5.8 A7: inside AutoML, AutoML gives the message)
           setTimeout(() => { if (Q50.pendAll && !V41.job) { const P = Q50.pendAll; Q50.pendAll = null; q50Finished('all', P.t0, P.stopReq && !P.partial ? true : false, '', P); } }, 1500);
         } else if (kind === 'interp' && Q50.pendAll) {
           const P = Q50.pendAll; Q50.pendAll = null;
@@ -46978,6 +46981,7 @@ function q50MainResult(kind) {
 function q50Finished(kind, t0, stopped, err, J) {
   J = J || {};
   if (typeof X50 !== 'undefined' && X50.running && kind !== 'automl') return;     // AutoML gives one message at its end
+  if (kind === 'all' && J.automl) return;                                           // a Train All run inside AutoML: no "Train All finished" (after-v5.8 A7)
   const ms = Date.now() - (t0 || Date.now());
   const userStop = !!(stopped || J.stopReq || (J.br && J.br.cancelled));
   if (ms < 5000 && !userStop && !err) return;                                       // short jobs need no message
@@ -54599,7 +54603,7 @@ function q63McFull() {
    Load from the internet window. Call-report data of every FDIC-insured
    bank, quarter by quarter, from the FDIC BankFind Suite (api.fdic.gov,
    free, no key). The result is a bank x quarter (or year) panel with
-   Bank as the Unit column; optional changes, up/down columns and a
+   FDIC_cert as the Unit column; optional changes, up/down columns and a
    balanced panel. Refresh data, the citation in the reports and the
    Python scripts (a function that downloads the same data) included.
    ===================================================================== */
@@ -54977,13 +54981,13 @@ function q64Build(spec, D) {
   if (spec.balanced) recs.forEach((m, c) => { if (m.size < allP.length) recs.delete(c); });
   // the table
   const vName = new Map(spec.vars.map(v => [v.code, v.name]));
-  const cols = ['Bank', 'Name', 'State', 'Date'].concat(spec.vars.map(v => v.name), spec.dchg.map(c => 'd_' + vName.get(c)), spec.dup.map(c => 'up_' + vName.get(c)));
+  const cols = ['FDIC_cert', 'Name', 'State', 'Date'].concat(spec.vars.map(v => v.name), spec.dchg.map(c => 'd_' + vName.get(c)), spec.dup.map(c => 'up_' + vName.get(c)));
   const table = [];
   allP.forEach(p => {
     const certs = Array.from(recs.keys()).filter(c => recs.get(c).has(p)).sort((a, b) => a - b);
     certs.forEach(c => {
       const m = recs.get(c), o = m.get(p), prevP = allP[pIdx.get(p) - 1], pr = prevP !== undefined ? m.get(prevP) : undefined, b = banks.get(c);
-      const row = { Bank: c, Name: b.name, State: b.st, Date: dateOf(p) };
+      const row = { FDIC_cert: c, Name: `${b.name} (${b.st ? b.st + ', ' : ''}${c})`, State: b.st, Date: dateOf(p) };   // after-v5.8 A3: distinct names
       spec.vars.forEach(v => { row[v.name] = Number.isFinite(o[v.code]) ? o[v.code] : ''; });
       spec.dchg.forEach(cd => { const a = o[cd], z = pr ? pr[cd] : NaN; row['d_' + vName.get(cd)] = Number.isFinite(a) && Number.isFinite(z) ? a - z : ''; });
       spec.dup.forEach(cd => { const a = o[cd], z = pr ? pr[cd] : NaN; row['up_' + vName.get(cd)] = Number.isFinite(a) && Number.isFinite(z) ? (a > z ? 1 : 0) : ''; });
@@ -54991,7 +54995,7 @@ function q64Build(spec, D) {
     });
   });
   const nB = recs.size, per = ann ? 'years' : 'quarters';
-  notes.push(`A panel: ${nB.toLocaleString()} banks × ${allP.length} ${per} (${q64Span(spec.freq, D.quarters[0], D.quarters[D.quarters.length - 1])}), ${table.length.toLocaleString()} rows, one row per bank and ${ann ? 'year' : 'quarter'}. <b>Bank</b> (the FDIC certificate number) will be the Unit column and <b>Date</b> the time column.`);
+  notes.push(`A panel: ${nB.toLocaleString()} banks × ${allP.length} ${per} (${q64Span(spec.freq, D.quarters[0], D.quarters[D.quarters.length - 1])}), ${table.length.toLocaleString()} rows, one row per bank and ${ann ? 'year' : 'quarter'}. <b>FDIC_cert</b> (the FDIC certificate number) will be the Unit column and <b>Date</b> the time column. <b>Name</b> shows each bank as NAME (state, certificate), so banks that share a name are told apart.`);
   if (nDropSize) notes.push(`${nDropSize.toLocaleString()} bank${nDropSize > 1 ? 's' : ''} left out by the size filter (total assets in each bank's last quarter of the period).`);
   if (spec.balanced) notes.push(`Balanced panel: ${(nAll - nB).toLocaleString()} bank${nAll - nB === 1 ? '' : 's'} not observed in every ${ann ? 'year' : 'quarter'} left out.`);
   else if (nUnbal) notes.push(`${nUnbal.toLocaleString()} bank${nUnbal > 1 ? 's are' : ' is'} not observed in every ${ann ? 'year' : 'quarter'} (opened, merged or closed during the period): an unbalanced panel. Tick <b>Keep only banks observed in every period</b> for a balanced one.`);
@@ -55013,6 +55017,7 @@ function q64Stop() { Q64.stop = true; Q64.ctls.slice().forEach(c => { try { c.ab
 function q64CiteHTML(A) {
   const s = A.specs[0], when = String(A.at || '').slice(0, 10);
   return `<h2>Data sources</h2><p>The bank data were downloaded on ${q64Esc(when)} with 4Cast Lab's Load from the internet, from the Federal Deposit Insurance Corporation (FDIC), BankFind Suite, institution financials (call reports), https://api.fdic.gov/banks: ${q64Esc(s.detail || '')}; ${A.first ? q64Span(s.freq, A.first, A.last) : `${s.y0} to ${s.y1}`}.</p><ul>` +
+    `<li><b>FDIC_cert</b>: the FDIC certificate number of the bank (the panel unit)</li><li><b>Name</b>: the bank's name with its head-office state and certificate number, NAME (state, certificate), so banks that share a name are told apart</li>` +
     s.vars.map(v => `<li><b>${q64Esc(v.name)}</b>: ${q64Esc(v.label)} (FDIC variable ${q64Esc(v.code)})</li>`).join('') +
     s.dchg.map(c => `<li><b>d_${q64Esc((s.vars.find(v => v.code === c) || {}).name || c)}</b>: change from the previous period of the same bank</li>`).join('') +
     s.dup.map(c => `<li><b>up_${q64Esc((s.vars.find(v => v.code === c) || {}).name || c)}</b>: 1 when it went up from the previous period of the same bank, 0 otherwise</li>`).join('') +
@@ -55129,7 +55134,11 @@ def fdic_download(cfg=FDIC, last_quarter="same"):
     for c in cfg["dup"]:
         d = panel[c] - prev[c]
         panel["up_" + name[c]] = (d > 0).astype(float).where(~gap & d.notna())
-    out = pd.DataFrame({"Bank": panel["CERT"], "Name": panel["CERT"].map(last["NAME"]), "State": panel["CERT"].map(last["STALP"]), "Date": panel["P"].map(date)})
+    nm = panel["CERT"].map(last["NAME"]).fillna("").astype(str)
+    stt = panel["CERT"].map(last["STALP"]).fillna("").astype(str)
+    cert = panel["CERT"].astype("int64").astype(str)
+    # Name = NAME (ST, CERT), so banks that share a name are told apart
+    out = pd.DataFrame({"FDIC_cert": panel["CERT"].astype("int64"), "Name": nm + " (" + (stt + ", ").where(stt != "", "") + cert + ")", "State": panel["CERT"].map(last["STALP"]), "Date": panel["P"].map(date)})
     for c, nm in cfg["vars"]:
         out[nm] = panel[c]
     for c in cfg["dchg"]:
@@ -55137,7 +55146,7 @@ def fdic_download(cfg=FDIC, last_quarter="same"):
     for c in cfg["dup"]:
         out["up_" + name[c]] = panel["up_" + name[c]]
     out["_t"] = panel["_t"]
-    return out.sort_values(["_t", "Bank"]).drop(columns="_t").reset_index(drop=True)
+    return out.sort_values(["_t", "FDIC_cert"]).drop(columns="_t").reset_index(drop=True)
 
 `;
 }
@@ -55198,9 +55207,9 @@ function q64PyInsert(r) {
       const file = new File([csv], fname, { type: 'text/csv' });
       Q52.net.pending = { specs, at: T.at, conv: 'last', layout: 'long', target: T.target, panel: true, fname, first: T.first, last: T.last, nBanks: T.nBanks, nPer: T.nPer };
       const w = document.getElementById('q52Net'); if (w) w.remove();
-      try { if (typeof V48 !== 'undefined') V48.pendingUnit = 'Bank'; } catch (e) {}
+      try { if (typeof V48 !== 'undefined') V48.pendingUnit = 'FDIC_cert'; } catch (e) {}
       try { handleFileUpload(file); } catch (e) { console.error('q64 load', e); showValidationBanner('The data could not be loaded: ' + (e && e.message ? e.message : e)); }
-      setTimeout(() => { try { const su = document.getElementById('q53Unit'), stt = document.getElementById('q53Time'); if (su && Array.from(su.options).some(o => o.value === 'Bank')) { su.value = 'Bank'; } if (stt && Array.from(stt.options).some(o => o.value === 'Date')) stt.value = 'Date'; } catch (e) {} }, 2500);
+      setTimeout(() => { try { const su = document.getElementById('q53Unit'), stt = document.getElementById('q53Time'); if (su && Array.from(su.options).some(o => o.value === 'FDIC_cert')) { su.value = 'FDIC_cert'; } if (stt && Array.from(stt.options).some(o => o.value === 'Date')) stt.value = 'Date'; } catch (e) {} }, 2500);
     };
     const oRf = q52NetRefresh;
     q52NetRefresh = async function () {
@@ -55212,7 +55221,7 @@ function q64PyInsert(r) {
       catch (e) { showValidationBanner('Refresh data: ' + e.message + '.'); if (b) { b.disabled = false; b.textContent = 'Refresh data'; } return; }
       if (b) { b.disabled = false; b.textContent = 'Refresh data'; }
       const base = (typeof baseData !== 'undefined' && baseData && baseData.length) ? baseData : rawData;
-      const key = r => String(r.Bank) + '|' + String(r.Date).slice(0, 10);
+      const key = r => String(r.FDIC_cert !== undefined && r.FDIC_cert !== '' ? r.FDIC_cert : r.Bank) + '|' + String(r.Date).slice(0, 10);   // older tables: Bank
       const old = new Map(base.map(r => [key(r), r]));
       let added = 0, revised = 0, gone = 0; const seen = new Set();
       T.table.forEach(r => {
@@ -55238,12 +55247,12 @@ function q64PyInsert(r) {
       } catch (e) {}
       return r;
     };
-    // Bank (the certificate number) and Name identify the bank: not predictors
+    // FDIC_cert (the certificate number; Bank in older tables) and Name identify the bank: not predictors
     if (typeof autoSuggestMetaVars === 'function') {
       const oM = autoSuggestMetaVars;
       autoSuggestMetaVars = function (data) {
         const r = oM.apply(this, arguments);
-        try { const A = Q52.net.active || Q52.net.pending; if (A && A.specs && A.specs[0] && A.specs[0].src === 'fdic' && data && data[0] && ('Bank' in data[0])) { r.add('Bank'); if ('Name' in data[0]) r.add('Name'); } } catch (e) {}
+        try { const A = Q52.net.active || Q52.net.pending; if (A && A.specs && A.specs[0] && A.specs[0].src === 'fdic' && data && data[0] && (('FDIC_cert' in data[0]) || ('Bank' in data[0]))) { r.add(('FDIC_cert' in data[0]) ? 'FDIC_cert' : 'Bank'); if ('Name' in data[0]) r.add('Name'); } } catch (e) {}
         return r;
       };
     }
@@ -55781,7 +55790,7 @@ function q68UI() {
   let box = document.getElementById('q68Pick');
   const on = q68Load();
   if (!box) {
-    box = document.createElement('details'); box.id = 'q68Pick'; box.className = 'q68-pick';
+    box = document.createElement('details'); box.id = 'q68Pick'; box.className = 'q68-pick fc-only';   /* after-v5.8 A1: Forecasting mode only */
     sel.insertAdjacentElement('afterend', box);
     box.addEventListener('change', e => {
       const c = e.target; if (!c || !c.dataset || !c.dataset.k) return;
@@ -58204,5 +58213,176 @@ print(f"\\nLargest relative difference: coefficients {dc:.1e}, standard errors {
 
 
 </script>
+<style id="x71-style">
+/* =====================================================================
+   After v5.8 (layer x71), Perry 7 Nov 2026: the welcome screen with the
+   guides (spec B8), a clean AutoML view (B9), the forecast upload card
+   visible with "Train a model first" (A5)
+   ===================================================================== */
+/* A5 */
+.a58-inf-note { margin:2px 0 10px; padding:8px 10px; border:1px dashed var(--border); border-radius:8px; color:var(--muted); font-size:12.5px; line-height:1.45; background:var(--bg-soft, transparent); }
+
+/* B8: the welcome screen */
+.a58-wel { position:fixed; inset:0; z-index:100002; display:flex; align-items:center; justify-content:center; background:rgba(15,23,42,.42); padding:16px; }
+.a58-welcard { position:relative; width:min(860px, 100%); max-height:calc(100vh - 32px); overflow:auto; background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:16px; box-shadow:var(--pop-shadow); padding:22px 26px 16px; }
+.a58-welx { position:absolute; top:10px; right:12px; width:auto !important; margin:0 !important; padding:0 8px !important; border:none !important; background:transparent !important; color:var(--muted) !important; font-size:24px !important; line-height:1; cursor:pointer; }
+.a58-welh { font-size:22px; font-weight:700; color:var(--heading); margin:0 30px 2px 0; }
+.a58-wels { color:var(--muted); font-size:13.5px; margin:0 0 16px; }
+.a58-choices { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; }
+@media (max-width:720px) { .a58-choices { grid-template-columns:1fr; } }
+.a58-choice { position:relative; display:flex !important; flex-direction:column; align-items:flex-start; gap:6px; width:100% !important; margin:0 !important; padding:16px 16px 14px !important; text-align:left; border:1.5px solid var(--border) !important; border-radius:12px !important; background:var(--card) !important; color:var(--text) !important; cursor:pointer; font-weight:400 !important; transition:border-color .15s, box-shadow .15s, transform .15s; }
+.a58-choice:hover, .a58-choice:focus-visible { border-color:var(--accent) !important; box-shadow:0 4px 14px rgba(15,23,42,.12); transform:translateY(-1px); }
+.a58-choice .x47-ic { width:26px; height:26px; color:var(--accent); fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.a58-choice b { font-size:16px; color:var(--heading); }
+.a58-choice .a58-view { font-size:11.5px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); }
+.a58-choice small { font-size:12.5px; line-height:1.45; color:var(--muted); }
+.a58-choice.a58-auto { border-color:var(--accent) !important; }
+.a58-last { position:absolute; top:10px; right:10px; font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:999px; background:var(--accent); color:var(--on-accent, #fff); }
+.a58-gh { margin:20px 0 6px; font-size:13px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--heading); }
+.a58-guides { display:flex; flex-direction:column; gap:2px; }
+.a58-guide { display:flex; align-items:flex-start; gap:10px; padding:8px 10px; border-radius:8px; color:var(--text) !important; text-decoration:none !important; }
+.a58-guide:hover, .a58-guide:focus-visible { background:var(--hover, rgba(37,99,235,.07)); }
+.a58-guide .x47-ic { flex:none; width:18px; height:18px; margin-top:2px; color:var(--accent); fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.a58-guide b { color:var(--accent); font-size:13.5px; }
+.a58-guide .a58-pg { color:var(--muted); font-size:12px; margin-left:4px; }
+.a58-guide small { display:block; color:var(--muted); font-size:12.5px; line-height:1.4; margin-top:1px; }
+.a58-welfoot { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:14px; padding-top:12px; border-top:1px solid var(--border-soft, var(--border)); }
+.a58-welfoot label { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); cursor:pointer; margin:0; }
+.a58-welfoot input { width:auto !important; margin:0 !important; }
+.a58-welclose { width:auto !important; margin:0 !important; padding:7px 18px !important; border-radius:8px !important; font-weight:600; background:var(--navy) !important; color:var(--on-navy) !important; border:1px solid var(--navy) !important; cursor:pointer; }
+
+/* B9: a clean AutoML view (Core / Expert / AutoML, Help, style and theme stay) */
+body.view-automl #appModeSwitch,
+body.view-automl #v46ResBtn,
+body.view-automl .v452-zoom,
+body.view-automl .x47-lpclose,
+body.view-automl #q60UndoBar,
+body.view-automl #v45FeatUndo { display:none !important; }
+#a58AutoBand { display:none; }
+html body.view-automl #v452Right > #a58AutoBand:not(#x50Sum):not(#updBanner) { display:flex !important; }
+#a58AutoBand { align-items:center; gap:14px; margin:0 0 12px; padding:14px 20px; border-radius:12px; background:var(--navy); color:var(--on-navy, #fff); }
+#a58AutoBand .x47-ic { flex:none; width:34px; height:34px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+#a58AutoBand .a58-bt { font-size:30px; font-weight:700; letter-spacing:.02em; line-height:1.1; }
+#a58AutoBand .a58-bs { font-size:14px; opacity:.88; margin-top:2px; }
+</style>
+<script id="x71-layer">
+/* ---------- A5: the Out-of-Sample Forecasting card stays visible ---------- */
+function a58InfReady() {
+  try {
+    const st = globalState;
+    if (!(st && st.y_train && st.y_train.length)) return false;
+    if (st.showingEnsemble && !(typeof ensembleResultsData !== 'undefined' && ensembleResultsData && ensembleResultsData.length)) return false;
+    return true;
+  } catch (e) { return false; }
+}
+function a58InfState(on) {
+  const c = document.getElementById('inferenceCard'); if (!c) return;
+  c.style.display = 'block';
+  const n = document.getElementById('a58InfNote'), i = document.getElementById('inferenceFileInput');
+  if (n) n.style.display = on ? 'none' : 'block';
+  if (i) i.disabled = !on;
+}
+(function () {
+  const oE = v41JobEnd;
+  v41JobEnd = function () {
+    const r = oE.apply(this, arguments);
+    setTimeout(() => { try { a58InfState(a58InfReady()); } catch (e) {} }, 0);
+    return r;
+  };
+  window.addEventListener('load', () => setTimeout(() => { try { a58InfState(a58InfReady()); } catch (e) {} }, 500));
+})();
+
+/* ---------- B8: the welcome screen, with the guides ---------- */
+const A58_GUIDE_BASE = 'https://github.com/PerryGogas/4Cast-Lab/releases/latest/download/';
+const A58_GUIDES = [
+  ['Your_First_Model.pdf', 'Your First Model', 13, 'Three short step-by-step guides (classification, regression, AutoML) from a built-in dataset to forecasts and reports. Start here.'],
+  ['4CastLab_Quick_Start_Guide.pdf', 'Quick Start Guide', 18, 'Train a model in about five minutes, estimate an econometric model, try AutoML and the Python Workbench. With the YouTube playlist.'],
+  ['4Cast_Lab_Features.pdf', '4Cast Lab Features', 4, 'What the app can do, on four pages: machine learning, econometrics, causality, reports and data from the internet.'],
+  ['4CastLab_Model_Selection_Guide.pdf', 'Selecting the Best Model with Train All', 11, 'For graduate students: how to choose the best model honestly with cross-validation and test it once on the Test Set.'],
+  ['4Cast_Lab_User_Manual.pdf', 'User Manual', 212, 'The full reference for every setting, model, test and report.']
+];
+function a58Esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function a58WelcomeOff() { try { return !!v41Prefs().welcomeOff; } catch (e) { return false; } }
+function a58CurView() { const b = document.body.classList; return b.contains('view-automl') ? 'automl' : (b.contains('view-core') ? 'core' : 'expert'); }
+function a58Ic(k) { return typeof x47H === 'function' ? x47H(k) : ''; }
+function a58WelcomeClose() {
+  const w = document.getElementById('a58Welcome'); if (w) w.remove();
+  document.removeEventListener('keydown', a58WelKey, true);
+}
+function a58WelKey(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); a58WelcomeClose(); } }
+function a58WelcomeOpen() {
+  a58WelcomeClose();
+  const cur = a58CurView();
+  const ch = (v, ic, title, view, text, cls) => `<button type="button" class="a58-choice${cls ? ' ' + cls : ''}" data-v="${v}">${cur === v ? '<span class="a58-last">Last used</span>' : ''}${a58Ic(ic)}<b>${title}</b><span class="a58-view">${view}</span><small>${text}</small></button>`;
+  const w = document.createElement('div');
+  w.id = 'a58Welcome'; w.className = 'a58-wel no-print'; w.setAttribute('role', 'dialog'); w.setAttribute('aria-modal', 'true'); w.setAttribute('aria-label', 'Welcome to 4Cast Lab');
+  w.innerHTML = `<div class="a58-welcard">
+    <button type="button" class="a58-welx" aria-label="Close">&times;</button>
+    <div class="a58-welh">Welcome to 4Cast Lab</div>
+    <div class="a58-wels">How would you like to start? You can change this at any time with Core / Expert / AutoML at the top.</div>
+    <div class="a58-choices">
+      ${ch('automl', 'automl', 'Just give me a forecast', 'AutoML', 'Upload your data, pick what to forecast, and AutoML builds and tests the model for you.', 'a58-auto')}
+      ${ch('core', 'square', 'Learn ML step by step', 'Core', 'The essentials with short explanations. Ideal for courses.')}
+      ${ch('expert', 'sliders', 'Full control', 'Expert', 'Every setting, econometrics, causality and the advanced tests.')}
+    </div>
+    <div class="a58-gh">Guides</div>
+    <div class="a58-guides">${A58_GUIDES.map(g => `<a class="a58-guide" href="${A58_GUIDE_BASE}${g[0]}" target="_blank" rel="noopener">${a58Ic('doc')}<span><b>${a58Esc(g[1])}</b><span class="a58-pg">${g[2]} pages, PDF</span><small>${a58Esc(g[3])}</small></span></a>`).join('')}</div>
+    <div class="a58-welfoot"><label><input type="checkbox" id="a58WelOff"${a58WelcomeOff() ? ' checked' : ''}> Don't show this again</label><button type="button" class="a58-welclose">Close</button></div>
+  </div>`;
+  document.body.appendChild(w);
+  w.querySelector('#a58WelOff').addEventListener('change', e => { try { v41SavePref('welcomeOff', !!e.target.checked); } catch (er) {} });
+  w.querySelector('.a58-welx').onclick = a58WelcomeClose;
+  w.querySelector('.a58-welclose').onclick = a58WelcomeClose;
+  w.addEventListener('click', e => { if (e.target === w) a58WelcomeClose(); });
+  w.querySelectorAll('.a58-choice').forEach(b => b.addEventListener('click', () => {
+    const v = b.dataset.v;
+    a58WelcomeClose();
+    try {
+      if (v === 'core' && typeof appMode !== 'undefined' && appMode !== 'forecast') setAppMode('forecast');
+      w44SetView(v);
+    } catch (e) { console.error('welcome view', e); }
+  }));
+  document.addEventListener('keydown', a58WelKey, true);
+  setTimeout(() => { const f = w.querySelector('.a58-choice'); if (f) f.focus(); }, 30);
+}
+// at start: every time, unless "Don't show this again" was ticked
+window.addEventListener('load', () => setTimeout(() => {
+  try {
+    if (a58WelcomeOff()) return;
+    const go = (n) => {
+      // wait while an import, a session preview or another question is open
+      if (n < 20 && (document.querySelector('[aria-modal="true"], #v462TourBox') || (typeof Q51 !== 'undefined' && Q51.imp))) { setTimeout(() => go(n + 1), 1000); return; }
+      a58WelcomeOpen();
+    };
+    go(0);
+  } catch (e) { console.error('welcome', e); }
+}, 1500));
+// Help (?) > Welcome and guides
+(function () {
+  const o = x47HelpMenu;
+  x47HelpMenu = function () {
+    const r = o.apply(this, arguments);
+    const pop = document.getElementById('x47HelpPop'); if (!pop) return r;
+    try {
+      const w = document.createElement('button'); w.type = 'button'; w.setAttribute('role', 'menuitem');
+      w.innerHTML = `${a58Ic('compass')}<span><b>Welcome and guides</b><small>Choose how to start; the guides and the User Manual</small></span>`;
+      w.addEventListener('click', () => { pop.remove(); a58WelcomeOpen(); });
+      pop.insertBefore(w, pop.firstChild);
+    } catch (e) { console.error('a58 help', e); }
+    return r;
+  };
+})();
+
+/* ---------- B9: the large AutoML title band ---------- */
+function a58AutoBand() {
+  const R = document.getElementById('v452Right'); if (!R || document.getElementById('a58AutoBand')) return;
+  const d = document.createElement('div'); d.id = 'a58AutoBand'; d.className = 'no-print';
+  d.innerHTML = `${a58Ic('automl')}<div><div class="a58-bt">AutoML</div><div class="a58-bs">Your data in, a tested forecasting model out, in a few steps.</div></div>`;
+  const u = document.getElementById('updBanner');
+  if (u && u.parentElement === R) R.insertBefore(d, u.nextSibling); else R.insertBefore(d, R.firstChild);
+}
+window.addEventListener('load', () => setTimeout(() => { try { a58AutoBand(); } catch (e) { console.error('automl band', e); } }, 300));
+</script>
+
 </body>
 </html>
