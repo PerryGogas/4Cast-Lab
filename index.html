@@ -2511,7 +2511,7 @@ body.dark .x54-learn-ic.qs { background: #475569; }
           <div id="leakageHint" class="leakage-hint warn" style="display:block;"><strong>Warning:</strong> Random Sampling Split provides no protection against data leakage. If the target or any feature is computed over a rolling window (e.g. rolling Sharpe, moving average, RSI, volatility over N periods), time-adjacent observations are nearly identical and may end up split between the training set and the Test Set, artificially inflating the Test Set score (especially for KNN, decision trees, Random Forest). If this applies to your data, prefer Time-Series (Sequential Split).</div>
 
           <div id="embargoContainer" style="display:none;">
-            <label>Embargo / Gap Before the Test Set (rows) <span class="info-hint" title="Removes this many rows from the end of the training period, immediately before the Test Set period starts. Prevents autocorrelated/overlapping observations from leaking across the split boundary -- a common cause of overly optimistic Test Set scores on time-series data, especially for distance-based methods like KNN.">?</span></label>
+            <label>Purge / Gap Before the Test Set (rows) <span class="info-hint" title="Removes this many rows from the end of the training period, immediately before the Test Set period starts, and from the end of the fitting part before each validation fold. A row is purged when its target falls inside the period being predicted, which the model could not have known when it was trained. 4Cast Lab always purges at least h rows (h = periods ahead). Set more if the target or a feature is built over a window. Called purging in López de Prado (2018) and a gap in scikit-learn.">?</span></label>
             <input type="number" id="embargoRows" value="0" min="0">
           </div>
 
@@ -3012,7 +3012,7 @@ body.dark .x54-learn-ic.qs { background: #475569; }
 
       <!-- ===================== v3.5 TIME-SERIES PANELS ===================== -->
       <div class="card" id="tsIntegrityCard">
-        <h3>Time Index and Data Integrity<span class="info-hint" title="The time-ordered split, the embargo, walk-forward cross-validation and every autocorrelation diagnostic in this app assume that row order is time order. This panel checks that assumption, and the other things about a dataset that quietly invalidate a forecasting model.">?</span></h3>
+        <h3>Time Index and Data Integrity<span class="info-hint" title="The time-ordered split, the purge, walk-forward cross-validation and every autocorrelation diagnostic in this app assume that row order is time order. This panel checks that assumption, and the other things about a dataset that quietly invalidate a forecasting model.">?</span></h3>
         <div class="ts-inline">
           <div>
             <label>Time index column</label>
@@ -3470,7 +3470,7 @@ body.dark .x54-learn-ic.qs { background: #475569; }
         <!-- The figure most read in any forecasting paper. -->
         <div class="card" id="timelineCard" style="display:none;">
           <div class="card-header-flex">
-            <h3>Actual vs Predicted over the Sample<span class="info-hint" title="Actual and predicted values in observation order, with the training, embargo and Test Set regions shaded. For a sequential split this is the figure that shows at a glance whether the model tracks the series out of sample or merely in sample.">?</span></h3>
+            <h3>Actual vs Predicted over the Sample<span class="info-hint" title="Actual and predicted values in observation order, with the training, purge and Test Set regions shaded. For a sequential split this is the figure that shows at a glance whether the model tracks the series out of sample or merely in sample.">?</span></h3>
             <button class="btn-chart-dl" onclick="downloadChartImage('timelineChart', 'Actual_vs_Predicted_Timeline')">⬇ Image</button>
           </div>
           <div class="chart-container-box">
@@ -4748,9 +4748,9 @@ function toggleEmbargoVisibility() {
   const hint = document.getElementById('leakageHint');
   if (!hint) return;
   if (strategy === 'time_series') {
-    hint.className = 'leakage-hint info x-only';   // v4.4 rebuild: about the embargo, an Expert setting
+    hint.className = 'leakage-hint info x-only';   // v4.4 rebuild: about the purge, an Expert setting
     hint.style.display = 'block';
-    hint.innerHTML = '<strong>Reminder:</strong> if the target or any feature is computed over a rolling window of N periods, set Embargo &ge; N rows. If your observations are not one per period (e.g. one every few days instead of daily), adjust N to rows: embargo &ge; N divided by the sampling step, rounded up. Embargo = 0 provides no protection at the training/validation boundary, nor at the internal k-fold cross-validation boundaries in grid search.';
+    hint.innerHTML = '<strong>Reminder:</strong> if the target or any feature is computed over a rolling window of N periods, set Purge &ge; N rows. If your observations are not one per period (e.g. one every few days instead of daily), adjust N to rows: purge &ge; N divided by the sampling step, rounded up. Purge = 0 provides no protection at the training/validation boundary, nor at the internal k-fold cross-validation boundaries in grid search.';
   } else if (strategy === 'random') {
     hint.className = 'leakage-hint warn';
     hint.style.display = 'block';
@@ -6572,18 +6572,18 @@ function applyOutlierBounds(rows, bounds, allowRowRemoval) {
   return result;
 }
 
-function computeSplitIndices(n, y, trainRatio, strategy, shouldStratify, randFunc, isClassification, embargo) {
-  embargo = Math.max(0, parseInt(embargo) || 0);
+function computeSplitIndices(n, y, trainRatio, strategy, shouldStratify, randFunc, isClassification, purge) {
+  purge = Math.max(0, parseInt(purge) || 0);
   let indices = Array.from({ length: n }, (_, i) => i);
 
   if (strategy === 'time_series') {
     const trainCount = Math.floor(n * trainRatio);
-    // Embargo: drop the last `embargo` rows immediately before the
+    // Purge: drop the last `purge` rows immediately before the
     // Test Set period instead of handing them to training. Without a
     // gap, training rows adjacent to the validation boundary can leak
     // information into validation on autocorrelated data (most visibly for
     // distance-based methods like KNN), inflating Test Set scores.
-    const trainEnd = Math.max(0, trainCount - embargo);
+    const trainEnd = Math.max(0, trainCount - purge);
     return { trainIdx: indices.slice(0, trainEnd), valIdx: indices.slice(trainCount) };
   }
 
@@ -6623,9 +6623,9 @@ function computeSplitIndices(n, y, trainRatio, strategy, shouldStratify, randFun
    only need a plain X/y split with the SAME signature as before -- now
    backed by a correct uniform shuffle via computeSplitIndices instead of
    the previous statistically biased `.sort(() => rand() - 0.5)`. */
-function splitDataset(X, y, trainRatio, strategy, shouldStratify, isDeterministic, isClassification, embargo) {
+function splitDataset(X, y, trainRatio, strategy, shouldStratify, isDeterministic, isClassification, purge) {
   const randFunc = getRandomFunc(isDeterministic);
-  const { trainIdx, valIdx } = computeSplitIndices(X.length, y, trainRatio, strategy, shouldStratify, randFunc, isClassification, embargo || 0);
+  const { trainIdx, valIdx } = computeSplitIndices(X.length, y, trainRatio, strategy, shouldStratify, randFunc, isClassification, purge || 0);
   return {
     X_train: trainIdx.map(i => X[i]), y_train: trainIdx.map(i => y[i]),
     X_val: valIdx.map(i => X[i]), y_val: valIdx.map(i => y[i])
@@ -6633,17 +6633,17 @@ function splitDataset(X, y, trainRatio, strategy, shouldStratify, isDeterministi
 }
 
 /* Guards against an empty or unusably small partition. The commonest cause
-   is an embargo wider than the training block, which drives the training end
+   is a purge wider than the training block, which drives the training end
    index to zero; previously the run just produced nothing and said nothing. */
-function checkPartitionSizes(nTrain, nVal, embargo, splitStrategy, nTotal) {
-  if (nTrain === 0 && splitStrategy === 'time_series' && embargo > 0) {
-    return `The embargo of ${embargo} row(s) is larger than the training block, so no training observations are left. ` +
+function checkPartitionSizes(nTrain, nVal, purge, splitStrategy, nTotal) {
+  if (nTrain === 0 && splitStrategy === 'time_series' && purge > 0) {
+    return `The purge of ${purge} row(s) is larger than the training block, so no training observations are left. ` +
            `With ${nTotal} usable rows and the current train ratio, the training block holds about ${Math.floor(nTotal * (parseFloat(document.getElementById('trainRatio').value) / 100))} row(s). ` +
-           `Reduce the embargo below that, or increase the train ratio.`;
+           `Reduce the purge below that, or increase the train ratio.`;
   }
   if (nTrain < 5) {
     return `Only ${nTrain} training observation(s) remain after preprocessing and splitting, which is too few to fit any model. ` +
-           `Check the train ratio, the embargo, the outlier setting and the missing-value setting.`;
+           `Check the train ratio, the purge, the outlier setting and the missing-value setting.`;
   }
   if (nVal < 2) {
     return `Only ${nVal} Test Set observation(s) remain, which is too few to evaluate a model. Lower the train ratio or supply more data.`;
@@ -8124,9 +8124,10 @@ function runPipeline() {
     const splitStrategy = document.getElementById('splitStrategy').value;
     const isDeterministic = document.getElementById('deterministicSampling').checked;
     const shouldStratify = document.getElementById('stratifySampling').checked;
-    // v4.3: with h >= 2 the last training targets overlap the validation
-    // period, so the embargo is at least h - 1 rows
-    const embargoRows = splitStrategy === 'time_series' ? Math.max(parseInt(document.getElementById('embargoRows')?.value) || 0, __hz.h > 1 ? __hz.h - 1 : 0) : 0;
+    // with h >= 1 the targets of the last h training rows fall inside the
+    // validation period (the model is trained at the end of the training
+    // set), so the purge is at least h rows
+    const embargoRows = splitStrategy === 'time_series' ? Math.max(parseInt(document.getElementById('embargoRows')?.value) || 0, __hz.h > 0 ? __hz.h : 0) : 0;
     const randFunc = getRandomFunc(isDeterministic);
 
     const { trainIdx, valIdx } = computeSplitIndices(encoded.length, y, trainRatio, splitStrategy, shouldStratify, randFunc, isClassification, embargoRows, encoded);
@@ -8159,7 +8160,7 @@ function runPipeline() {
     let X_val = valRows.map(r => features.map(f => Number(r[f]) || 0));
     let y_val = valRows.map(r => Number(r[targetCol]));
 
-    // A partition can come out empty -- most easily by setting an embargo
+    // A partition can come out empty -- most easily by setting a purge
     // larger than the training block, which drives trainEnd to 0. Previously
     // the run simply produced nothing, with no message. Say so instead.
     const partitionError = checkPartitionSizes(X_train.length, X_val.length, embargoRows, splitStrategy, encoded.length);
@@ -8249,7 +8250,7 @@ function runPipeline() {
             yAll: y, timeOrdered: timeOrderInfo().ok,   // v4.2: random-walk benchmark under either split
             horizon: __hzRes.h, includeYt: !!__hzRes.ytName, ytName: __hzRes.ytName, yOriginFull: __hzRes.yOrigin,   // v4.3
             yOriginTrain: trainIdx.map(i => __hzRes.yOrigin[rawRowIdx[i]]),
-            embargoAuto: __hz.h > 1 && splitStrategy === 'time_series' ? __hz.h - 1 : 0
+            embargoAuto: __hz.h > 0 && splitStrategy === 'time_series' ? __hz.h : 0
           };
           globalState.v45 = __v45.info;
           globalState.v45raw = __v45Raw;
@@ -8364,9 +8365,10 @@ function runTrainAll() {
     const splitStrategy = document.getElementById('splitStrategy').value;
     const isDeterministic = document.getElementById('deterministicSampling').checked;
     const shouldStratify = document.getElementById('stratifySampling').checked;
-    // v4.3: with h >= 2 the last training targets overlap the validation
-    // period, so the embargo is at least h - 1 rows
-    const embargoRows = splitStrategy === 'time_series' ? Math.max(parseInt(document.getElementById('embargoRows')?.value) || 0, __hz.h > 1 ? __hz.h - 1 : 0) : 0;
+    // with h >= 1 the targets of the last h training rows fall inside the
+    // validation period (the model is trained at the end of the training
+    // set), so the purge is at least h rows
+    const embargoRows = splitStrategy === 'time_series' ? Math.max(parseInt(document.getElementById('embargoRows')?.value) || 0, __hz.h > 0 ? __hz.h : 0) : 0;
     const randFunc = getRandomFunc(isDeterministic);
 
     const { trainIdx, valIdx } = computeSplitIndices(encoded.length, y, trainRatio, splitStrategy, shouldStratify, randFunc, isClassification, embargoRows, encoded);
@@ -8433,7 +8435,7 @@ function runTrainAll() {
       yAll: y, timeOrdered: timeOrderInfo().ok,   // v4.2
       horizon: __hzRes.h, includeYt: !!__hzRes.ytName, ytName: __hzRes.ytName, yOriginFull: __hzRes.yOrigin,   // v4.3
       yOriginTrain: trainIdx.map(i => __hzRes.yOrigin[rawRowIdx[i]]),
-      embargoAuto: __hz.h > 1 && splitStrategy === 'time_series' ? __hz.h - 1 : 0
+      embargoAuto: __hz.h > 0 && splitStrategy === 'time_series' ? __hz.h : 0
     };
 
     const algorithms = (typeof q68Pick === 'function' ? q68Pick : (a => a))([
@@ -9145,8 +9147,8 @@ function generateReport() {
    Two defects in the previous implementation:
 
    H-2  On a chronological sample, plain k-fold hands folds 0..k-2 training
-        rows that come AFTER the held-out block. Purging and the embargo
-        remove the near-boundary contamination but not the look-ahead: with
+        rows that come AFTER the held-out block. The purge (before the block)
+        and the embargo (after it) remove the near-boundary contamination but not the look-ahead: with
         8 training rows and k=4 the first fold "predicts" rows 1-2 while
         being fitted on rows 3-8. Only the last fold is a forecast. The
         inner CV was therefore rewarding hindsight while the outer split
@@ -9170,15 +9172,15 @@ function generateReport() {
 
 /* Build the fold index sets for one CV run.
    Returns [{ trainIdx, valIdx }, ...] over positions 0..n-1 of X. */
-function buildCvFolds(n, y, k, isClassification, splitStrategy, embargo, scheme, randFunc) {
-  embargo = (splitStrategy === 'time_series') ? Math.max(0, parseInt(embargo) || 0) : 0;
+function buildCvFolds(n, y, k, isClassification, splitStrategy, purge, scheme, randFunc) {
+  purge = (splitStrategy === 'time_series') ? Math.max(0, parseInt(purge) || 0) : 0;
   const folds = [];
 
   if (splitStrategy === 'time_series' && (scheme === 'expanding' || scheme === 'sliding')) {
     /* Rolling-origin evaluation. The sample is cut into k+1 consecutive
        blocks; block 0 is the initial training window and blocks 1..k are
        validated in turn, each trained only on what precedes it (minus the
-       embargo). Every fold is a genuine one-step-ahead-style forecast. */
+       purge). Every fold is a genuine one-step-ahead-style forecast. */
     // The initial training block is one of the k+1 equal segments. The floor
     // of 2 keeps a degenerate tiny sample from producing 1-row training sets;
     // folds that still end up with fewer than 2 rows are skipped and counted.
@@ -9186,7 +9188,7 @@ function buildCvFolds(n, y, k, isClassification, splitStrategy, embargo, scheme,
     for (let i = 1; i <= k; i++) {
       const valStart = Math.floor(n * i / (k + 1));
       const valEnd = (i === k) ? n : Math.floor(n * (i + 1) / (k + 1));
-      const trainEnd = Math.max(0, valStart - embargo);
+      const trainEnd = Math.max(0, valStart - purge);
       const trainStart = (scheme === 'sliding') ? Math.max(0, trainEnd - windowLen) : 0;
       const trainIdx = [], valIdx = [];
       for (let t = trainStart; t < trainEnd; t++) trainIdx.push(t);
@@ -9203,8 +9205,8 @@ function buildCvFolds(n, y, k, isClassification, splitStrategy, embargo, scheme,
     for (let i = 0; i < k; i++) {
       const valStart = i * foldSize;
       const valEnd = (i === k - 1) ? n : valStart + foldSize;   // remainder rows go to the last fold
-      const purgedStart = Math.max(0, valStart - embargo);
-      const purgedEnd = Math.min(n, valEnd + embargo);
+      const purgedStart = Math.max(0, valStart - purge);
+      const purgedEnd = Math.min(n, valEnd + purge);   // k-fold only: the same number of rows is embargoed after the block
       const trainIdx = [], valIdx = [];
       for (let t = 0; t < purgedStart; t++) trainIdx.push(t);
       for (let t = purgedEnd; t < n; t++) trainIdx.push(t);
@@ -9240,10 +9242,10 @@ function buildCvFolds(n, y, k, isClassification, splitStrategy, embargo, scheme,
   return folds;
 }
 
-function executeCrossValidation(X, y, k, modelType, params, isClassification, randFunc, scalingType, splitStrategy, embargo, scheme) {
+function executeCrossValidation(X, y, k, modelType, params, isClassification, randFunc, scalingType, splitStrategy, purge, scheme) {
   scheme = scheme || ((splitStrategy === 'time_series') ? 'expanding' : 'kfold');
   const n = X.length;
-  const folds = buildCvFolds(n, y, k, isClassification, splitStrategy, embargo, scheme, randFunc);
+  const folds = buildCvFolds(n, y, k, isClassification, splitStrategy, purge, scheme, randFunc);
 
   const foldScores = [];
   let nSkipped = 0, nFallback = 0;
@@ -9430,7 +9432,7 @@ function reproducibilityTable() {
     ['Feature scaling', { none: 'none', zscore: 'Z-score', minmax01: 'Min-Max [0,1]', minmax_neg1_1: 'Min-Max [-1,1]' }[st.scalingType] || st.scalingType],
     ['Split strategy', st.splitStrategy === 'time_series' ? 'sequential (chronological)' : 'random'],
     ['Training / Test Set', `${g('trainRatio')}% / ${100 - Number(g('trainRatio'))}%  →  ${st.X_train ? st.X_train.length : 0} / ${st.X_val ? st.X_val.length : 0} rows`],
-    ['Embargo', st.splitStrategy === 'time_series' ? `${st.embargoRows || 0} row(s)` : 'not applicable'],
+    ['Purge', st.splitStrategy === 'time_series' ? `${st.embargoRows || 0} row(s)` : 'not applicable'],
     ['Stratified split', st.isClassification && st.splitStrategy !== 'time_series' ? g('stratifySampling') : 'not applicable'],
     ['Cross-validation', `${st.kFolds}-fold, ${CV_SCHEME_LABELS[st.cvScheme] || st.cvScheme}`],
     ['Random seed', g('deterministicSampling') === 'yes' ? 'fixed (42), reproducible' : 'not fixed, results vary between runs'],
@@ -9501,7 +9503,7 @@ function buildMethodsReport() {
     h += `<li><b>Random splitting.</b> If the target or any predictor is computed over a rolling window, time-adjacent observations are near-duplicates and may straddle the split, inflating Test Set performance.</li>`;
   }
   if (st.splitStrategy === 'time_series' && (!st.embargoRows || st.embargoRows === 0)) {
-    h += `<li><b>No embargo.</b> With a zero-row gap, observations immediately either side of the split boundary may share information through overlapping windows.</li>`;
+    h += `<li><b>No purge.</b> With a zero-row gap, observations immediately either side of the split boundary may share information through overlapping windows.</li>`;
   }
   if (st.showingEnsemble && !st.tunedEnsemble) {
     h += `<li><b>Untuned comparison.</b> The models were fitted at default hyperparameters, so the comparison reflects defaults rather than the algorithms' potential.</li>`;
@@ -10693,7 +10695,7 @@ function tsKurtosis(x) {
    proceeds:
 
      1. Time index and data integrity. Everything downstream (the
-        time-ordered split, the embargo, walk-forward CV, the ACF) assumes
+        time-ordered split, the purge, walk-forward CV, the ACF) assumes
         row order is time order. Until v3.4 nothing checked it.
      2. Variable construction. Unit-root tests are only diagnostics unless
         the user can act on them, so differences, logs, growth rates,
@@ -10913,7 +10915,7 @@ function corrPreviewData() {
     const split = (document.getElementById('splitStrategy') || {}).value || 'random';
     const det = !!(document.getElementById('deterministicSampling') || {}).checked;
     const strat = !!(document.getElementById('stratifySampling') || {}).checked;
-    const emb = split === 'time_series' ? Math.max(parseInt((document.getElementById('embargoRows') || {}).value) || 0, hz.h > 1 ? hz.h - 1 : 0) : 0;
+    const emb = split === 'time_series' ? Math.max(parseInt((document.getElementById('embargoRows') || {}).value) || 0, hz.h > 0 ? hz.h : 0) : 0;
     const isClass = checkIsClassification(y);
     const saved = (typeof currentSeed !== 'undefined') ? currentSeed : null;
     let trainIdx = null;
@@ -10921,7 +10923,7 @@ function corrPreviewData() {
     finally { if (saved !== null) currentSeed = saved; }
     rows = trainIdx.map(i => enc[i]);
     basis = split === 'time_series'
-      ? `the <b>${rows.length.toLocaleString()} training rows</b> (the first ${Math.round(ratio * 100)}% in time order${emb ? ', before the embargo' : ''}), so the Test Set period is not used`
+      ? `the <b>${rows.length.toLocaleString()} training rows</b> (the first ${Math.round(ratio * 100)}% in time order${emb ? ', before the purge' : ''}), so the Test Set period is not used`
       : `the <b>${rows.length.toLocaleString()} training rows</b> the random split will draw${det ? '' : ' (sampling is not seeded, so the next run may draw different rows)'}, so the Test Set rows are not used`;
   } else {
     basis = `<b>all ${rows.length.toLocaleString()} rows</b>, including the rows that will be used as the Test Set (choosing predictors from these values uses information the model is later tested on)`;
@@ -11526,7 +11528,7 @@ function horizonRefreshLabel() {
   const tgt = (document.getElementById('targetSelect') || {}).value || '';
   const hz = horizonSettings();
   if (lab) lab.innerHTML = hz.h > 0
-    ? `Modelled target: <b>${impEsc(horizonLabel(tgt, hz.h))}</b>${hz.includeYt ? ` · predictor added: <b>${impEsc(horizonYtName(tgt))}</b>` : ''}${hz.h > 1 ? ` · embargo of at least ${hz.h - 1} row(s) under the Time-Series split` : ''}`
+    ? `Modelled target: <b>${impEsc(horizonLabel(tgt, hz.h))}</b>${hz.includeYt ? ` · predictor added: <b>${impEsc(horizonYtName(tgt))}</b>` : ''}${hz.h > 0 ? ` · purge of at least ${hz.h} row(s) under the Time-Series split` : ''}`
     : `Modelled target: <b>${impEsc(tgt)}</b> (same row, no shift)`;
   const yRow = document.getElementById('horizonYtRow');
   if (yRow) yRow.style.opacity = hz.h > 0 ? '1' : '0.5';
@@ -12040,7 +12042,7 @@ function renderTimeIntegrity() {
       info.ordered = desc === 0;
       info.duplicates = ties;
       if (desc > 0) {
-        issues.push(`<b>The rows are not in increasing time order:</b> ${desc} of ${n - 1} consecutive pairs go backwards. Every time-ordered split, the embargo, walk-forward cross-validation and the autocorrelation diagnostics treat row order as time order, so these results would be meaningless until the file is sorted by <b>${col}</b>.`);
+        issues.push(`<b>The rows are not in increasing time order:</b> ${desc} of ${n - 1} consecutive pairs go backwards. Every time-ordered split, the purge, walk-forward cross-validation and the autocorrelation diagnostics treat row order as time order, so these results would be meaningless until the file is sorted by <b>${col}</b>.`);
       }
       if (ties > 0) {
         issues.push(`<b>${ties} duplicate timestamp(s)</b> in <b>${col}</b>. Two observations sharing a date usually means the file has been stacked or merged incorrectly.`);
@@ -14035,13 +14037,13 @@ function updateCvSchemeHint() {
   hint.style.display = 'block';
   if (sel.value === 'purged_kfold') {
     hint.className = 'leakage-hint warn';
-    hint.innerHTML = '<strong>Warning:</strong> purged k-fold trains each fold on rows from BOTH sides of the held-out block. On a chronological sample that means k&minus;1 of the k folds are fitted partly on data from after the period they are asked to predict. Purging and the embargo remove contamination at the block edges, not the look-ahead itself. The resulting CV score is an interpolation score, not a forecasting score, and hyperparameters chosen by it are chosen against a different objective from the one the Test Set measures.';
+    hint.innerHTML = '<strong>Warning:</strong> purged k-fold trains each fold on rows from BOTH sides of the held-out block. On a chronological sample that means k&minus;1 of the k folds are fitted partly on data from after the period they are asked to predict. The purge before the held-out block and the embargo after it remove contamination at the block edges, not the look-ahead itself. The resulting CV score is an interpolation score, not a forecasting score, and hyperparameters chosen by it are chosen against a different objective from the one the Test Set measures.';
   } else if (sel.value === 'sliding') {
     hint.className = 'leakage-hint info';
     hint.innerHTML = '<strong>Sliding window:</strong> each origin trains on a fixed-length window of the most recent history before the held-out block and predicts forward. Preferred over the expanding window when the relationship drifts, since old observations are dropped rather than accumulated.';
   } else {
     hint.className = 'leakage-hint info';
-    hint.innerHTML = '<strong>Expanding window:</strong> each origin trains on everything before the held-out block (minus the embargo) and predicts forward, so every fold is a genuine forecasting exercise. This is the scheme that matches what the train/validation split itself measures.';
+    hint.innerHTML = '<strong>Expanding window:</strong> each origin trains on everything before the held-out block (minus the purge) and predicts forward, so every fold is a genuine forecasting exercise. This is the scheme that matches what the train/validation split itself measures.';
   }
 }
 
@@ -14291,7 +14293,7 @@ function applyTimeSeriesDefault() {
      the target in the previous row of the full sample, which is known at
      the time of the forecast. v4.1 computed it only under the Time-Series
      split and used the last TRAINING value for the first Test Set row,
-     which with an embargo is several periods stale.
+     which with a purge is several periods stale.
    - Training mean (y_hat = mean of the training targets), always.
    The primary benchmark (the one tested) is the random walk when available. */
 function buildNaiveBenchmark(state) {
@@ -14831,7 +14833,7 @@ function renderTimelineChart() {
       plugins: {
         legend: {},
         title: { display: true, color: '#64748b', font: { size: 11, weight: 'normal' },
-          text: `Training rows 1–${nTr}${emb > 0 ? `  ·  embargo gap ${nTr + 1}–${nTr + emb}` : ''}  ·  Test Set rows ${nTr + emb + 1}–${total}` }
+          text: `Training rows 1–${nTr}${emb > 0 ? `  ·  purge gap ${nTr + 1}–${nTr + emb}` : ''}  ·  Test Set rows ${nTr + emb + 1}–${total}` }
       },
       scales: {
         x: { title: { display: true, text: 'Observation (chronological order)', color: '#64748b' }, grid: { color: '#e2e8f0' }, ticks: { maxTicksLimit: 15 } },
@@ -16164,9 +16166,9 @@ function buildMethodsSummaryText() {
   }
   paragraphs.push(preprocSentence);
 
-  let splitSentence = `Data split: ${splitStrategy} was used (${trainRatio}% training / ${100 - trainRatio}% Test Set)${stratified ? ', stratified by class label' : ''}${embargoRowsVal > 0 ? `, with a ${embargoRowsVal}-row embargo (gap) separating the training and Test Set periods to reduce leakage from autocorrelated observations` : ''}, yielding ${nTrain} training observations and ${nVal} Test Set observations.`;
+  let splitSentence = `Data split: ${splitStrategy} was used (${trainRatio}% training / ${100 - trainRatio}% Test Set)${stratified ? ', stratified by class label' : ''}${embargoRowsVal > 0 ? `, with a ${embargoRowsVal}-row purge (gap) separating the training and Test Set periods to reduce leakage from autocorrelated observations` : ''}, yielding ${nTrain} training observations and ${nVal} Test Set observations.`;
   if (totalUsed < rawData.length) {
-    splitSentence += ` ${rawData.length - totalUsed} row(s) were removed during preprocessing (missing target values, incomplete-row deletion, the embargo gap, and/or outlier trimming applied to the training set).`;
+    splitSentence += ` ${rawData.length - totalUsed} row(s) were removed during preprocessing (missing target values, incomplete-row deletion, the purge gap, and/or outlier trimming applied to the training set).`;
   }
   splitSentence += deterministic ? ' Sampling was performed with a fixed random seed for reproducibility.' : ' Sampling was not seeded, so results will vary across runs.';
   if (splitStrategyRaw === 'time_series' && globalState.cvScheme) {
@@ -20231,7 +20233,7 @@ const V41_HELP = [
   { title: 'Simulate class imbalance', cat: 'Preprocessing', ids: ['imbalanceMode'],
     text: 'Teaching aid, offered only with the two built-in classification examples (Visual 2D Synthetic and Credit Default): it re-draws the example with about 15% positives so you can see why accuracy misleads and why PR-AUC, MCC and balanced accuracy matter under imbalance. It never changes uploaded data; for a real imbalanced target see Class imbalance handling.' },
   { title: 'Time index and data integrity', cat: 'Time series', ids: ['tsIntegrityCard', 'tsTimeCol'], terms: ['time index and data integrity', 'time index column', 'time index'],
-    text: 'Checks that the rows are in time order with no duplicates and no gaps, and infers the frequency. The time-series split, the embargo, walk-forward validation and every autocorrelation diagnostic assume consecutive, ordered observations.' },
+    text: 'Checks that the rows are in time order with no duplicates and no gaps, and infers the frequency. The time-series split, the purge, walk-forward validation and every autocorrelation diagnostic assume consecutive, ordered observations.' },
   { title: 'Variable construction', cat: 'Time series', ids: ['transformCard', 'tfType'], terms: ['variable construction', 'transformation'],
     text: 'Builds differences, log differences, growth rates, seasonal differences, detrended series and lags from existing columns. New variables appear at once as candidate targets and features and are rebuilt automatically for new data in Out-of-Sample Forecasting. A difference or lag of order k drops the first k rows.' },
   { title: 'Data visualization', cat: 'Data', ids: ['dataVizCard'], terms: ['data visualization', 'inspection plot type'],
@@ -20280,8 +20282,8 @@ const V41_HELP = [
     text: 'For time-ordered data: <b>expanding window</b> trains on everything before each held-out block, <b>sliding window</b> on a fixed-length window, both predicting forward in time. <b>Purged k-fold</b> also trains on later data, so it is not a forecasting evaluation.' },
   { title: 'Train / Test Set split', cat: 'Evaluation', ids: ['splitStrategy'], terms: ['train / test set split', 'validation splitting logic'],
     text: '<b>Random</b> sampling suits independent observations (cross-sections). <b>Time-series</b> keeps the order: the model is trained on the past and validated on the most recent rows, as in real forecasting. Use it for any data with a time dimension.' },
-  { title: 'Embargo', cat: 'Evaluation', ids: ['embargoRows'], terms: ['embargo'],
-    text: 'Rows removed between the end of training and the start of the Test Set. When a target or feature is computed over a window (a 12-month growth rate, a moving average), adjacent rows share information; set the embargo at least equal to the window length to prevent leakage.' },
+  { title: 'Purge', cat: 'Evaluation', ids: ['embargoRows'], terms: ['purge', 'purging', 'gap', 'embargo'],
+    text: 'Rows removed from the end of the training data just before the Test Set, and before each validation fold, because their target falls inside the period being predicted: when the model is trained those values are not yet known. The minimum is h rows, h being the number of periods ahead; 4Cast Lab applies it automatically. When a target or feature is computed over a window (a 12-month growth rate, a moving average), set the purge at least equal to the window length. Called purging in López de Prado (2018) and a gap in scikit-learn; there, an embargo is a buffer after a validation fold, used in purged k-fold.' },
   { title: 'Replicable sampling', cat: 'Evaluation', ids: ['deterministicSampling'], terms: ['replicable (deterministic) sampling'],
     text: 'Fixes the random seed (42), so splits, random forests, neural networks and bootstraps give the same numbers every run. Keep it on for teaching and for any result you report.' },
   { title: 'Stratified split', cat: 'Evaluation', ids: ['stratifySampling'], terms: ['stratify sample ratios'],
@@ -20365,7 +20367,7 @@ const V41_HELP = [
   { title: 'Normal Q-Q plot', cat: 'Diagnostics', ids: ['qqCard'], terms: ['normal q-q plot'],
     text: 'Standardised residual quantiles against normal quantiles. Points on the line mean normality; an S shape means fat tails. Normality matters for prediction intervals and small-sample inference.' },
   { title: 'Actual vs predicted over the sample', cat: 'Diagnostics', ids: ['timelineCard'], terms: ['actual vs predicted', 'actual and fitted', 'actual and one-step-ahead fitted', 'forecast vs actual'],
-    text: 'Actual and predicted values in observation order, with training, embargo and Test Set periods shaded. Hover for values, click to pin; Ctrl + wheel zooms, drag pans, double-click resets.' },
+    text: 'Actual and predicted values in observation order, with training, purge and Test Set periods shaded. Hover for values, click to pin; Ctrl + wheel zooms, drag pans, double-click resets.' },
   { title: 'Forecast error over time', cat: 'Diagnostics', ids: ['errorTimeCard', 'oosErrorCard'], terms: ['forecast error over'],
     text: 'Errors in time order; bars beyond two standard deviations are highlighted. Clusters of large errors reveal periods (regimes, crises) in which the model breaks down.' },
   { title: 'Calibration diagram', cat: 'Diagnostics', ids: ['calibrationCard'], terms: ['calibration'],
@@ -20535,7 +20537,7 @@ const V41_HELP = [
   { title: 'Analysis reports', cat: 'Reports', ids: ['tabReports'], terms: ['analysis reports'],
     text: 'The <b>Full Report</b> reads from start to end: the data and everything done to it, the methods, all results with every table and figure, diagnostics, uncertainty, the run history and the methodology checklist. The <b>Methods Report</b> is the prose for the Methods section of a paper. Print or save either as PDF.' },
   { title: 'Methodology checklist', cat: 'Reports', ids: ['v41ChecklistCard'], terms: ['methodology checklist'],
-    text: 'Collects, in one place, every warning the app raises about the current analysis: leakage risk, missing embargo, non-stationary variables, weak instruments, heteroskedasticity, small samples. Review it before quoting results.' },
+    text: 'Collects, in one place, every warning the app raises about the current analysis: leakage risk, missing purge, non-stationary variables, weak instruments, heteroskedasticity, small samples. Review it before quoting results.' },
   { title: 'AI interpretation', cat: 'Reports', ids: ['aiReportCard', 'aiProvider', 'aiModel', 'geminiApiKeyInput'], terms: ['ai interpretation', 'provider'],
     text: 'Sends the displayed results (not the data file) to the AI provider you choose, with your own API key, and returns a written interpretation. The key stays in memory only. Always check the text against the numbers.' },
   { title: 'Charts: hover, pin, zoom, export', cat: 'Interface', terms: ['chart tools'],
@@ -20752,7 +20754,7 @@ function v41RenderGlossary() {
   const items = V41_HELP.map((h, i) => ({ h, i })).sort((a, b) => a.h.title.localeCompare(b.h.title, undefined, { sensitivity: 'base' }));
   let html = `<div class="card" id="v41GlossaryCard"><h3>Glossary</h3>
     <div style="font-size:13px; color:var(--muted); margin-bottom:8px;">Every term, setting, statistic and test in 4Cast Lab, in one place. The same texts appear when you hover over a <b>?</b> anywhere in the app.</div>
-    <div class="v41-search" style="max-width:420px;">${V41_ICON.search}<input type="search" id="v41GlossarySearch" placeholder="Search the glossary (e.g. embargo, KPSS, SHAP)" aria-label="Search the glossary"></div>
+    <div class="v41-search" style="max-width:420px;">${V41_ICON.search}<input type="search" id="v41GlossarySearch" placeholder="Search the glossary (e.g. purge, KPSS, SHAP)" aria-label="Search the glossary"></div>
     <div class="v41-gloss-grid" id="v41GlossaryList">`;
   let letter = '';
   items.forEach(({ h, i }) => {
@@ -20783,7 +20785,7 @@ function v41RenderGlossary() {
    ===================================================================== */
 const V41_DATASET_NOTES = {
   preset_rating: 'Simulated credit ratings of 400 firms: <b>A</b> (low risk), <b>B</b> and <b>C</b> (high risk), from profitability (ROA), leverage, interest coverage, liquidity, size and sector. <b>Try:</b> Train All Models &amp; Compare for a multi-class classification, then the confusion matrices and the metrics of each class.',
-  preset_macro: 'Simulated monthly data, 2000 to 2023 (288 months). IP and CPI are random walks with drift; M2 is cointegrated with them; Unemployment follows Okun\'s law; StockReturn has GARCH volatility. <b>Try:</b> unit-root tests on IP and on its log difference; an ECM or VECM for M2, IP and CPI; a GARCH(1,1) on StockReturn; forecasting Unemployment with a time-series split and an embargo.',
+  preset_macro: 'Simulated monthly data, 2000 to 2023 (288 months). IP and CPI are random walks with drift; M2 is cointegrated with them; Unemployment follows Okun\'s law; StockReturn has GARCH volatility. <b>Try:</b> unit-root tests on IP and on its log difference; an ECM or VECM for M2, IP and CPI; a GARCH(1,1) on StockReturn; forecasting Unemployment with a time-series split and a purge.',
   preset_wage: 'Simulated cross-section of 1,000 workers. The true return to a year of education is 8%; unobserved ability raises both education and wages, and DistCollege (distance to college) shifts education only. <b>Try:</b> OLS of log wage (build it on the Data tab) on education and experience with robust SEs, then IV with DistCollege as the instrument, and compare; a logit for HighWage; dummies for Region.'
 };
 function v41ShowDatasetNote() {
@@ -20965,7 +20967,7 @@ function v41RecordRun(kind) {
   const base = {
     dataset: (typeof currentDatasetFileName !== 'undefined' && currentDatasetFileName) || 'dataset',
     target: tgtLabel(st), nFeat: (st.features || []).length, features: (st.features || []).join(', '),
-    split: st.splitStrategy === 'time_series' ? `time series${st.embargoRows ? ', embargo ' + st.embargoRows : ''}` : 'random',
+    split: st.splitStrategy === 'time_series' ? `time series${st.embargoRows ? ', purge ' + st.embargoRows : ''}` : 'random',
     ratio: Math.round((st.trainRatio || 0) * 100), cv: `${st.kFolds}-fold ${(CV_SCHEME_LABELS[st.cvScheme] || st.cvScheme || '').split(' (')[0]}`,
     scaling: st.scalingType, isClass, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     nTrain: st.X_train ? st.X_train.length : 0, nVal: st.X_val ? st.X_val.length : 0
@@ -21065,8 +21067,8 @@ function v41ChecklistItems(mode) {
       else add('ok', 'Random split', 'Suitable for independent observations (a cross-section). If the rows are ordered in time, use the time-series split instead.');
     } else {
       add('ok', 'Time-series split', 'The model is trained on the past and validated on the most recent observations.');
-      if (!st.embargoRows) add('warn', 'No embargo', 'If any variable is built over a window (growth over 12 months, a moving average), set the embargo at least equal to that window, or adjacent rows leak information across the split.');
-      else add('ok', `Embargo of ${st.embargoRows} row(s)`, 'Rows next to the split are removed, so windowed variables cannot leak across it.');
+      if (!st.embargoRows) add('warn', 'No purge', 'If any variable is built over a window (growth over 12 months, a moving average), set the purge at least equal to that window, or adjacent rows leak information across the split.');
+      else add('ok', `Purge of ${st.embargoRows} row(s)`, 'Rows next to the split are removed, so windowed variables cannot leak across it.');
       if (st.cvScheme === 'purged_kfold') add('warn', 'Purged k-fold on time series', 'Hyperparameters were chosen with folds that train on later data, which is not a forecasting evaluation. Prefer an expanding or sliding window.');
     }
     const nVal = st.X_val ? st.X_val.length : 0;
@@ -21468,7 +21470,7 @@ function v41FullReportForecast() {
   const econ = v41Grab('econBenchmarkOutput'); if (econ && econ.replace(/<[^>]+>/g, '').trim()) h += `<h3>Econometric benchmark</h3>` + econ;
   const perfFigs = [['rocRegChart', st.isClassification ? 'ROC curve on the Test Set.' : 'Predicted against actual values on the Test Set.'],
     ['prChart', 'Precision-recall curve.'], ['calibrationChart', 'Calibration (reliability) diagram.'],
-    ['timelineChart', 'Actual and predicted values over the whole sample; shading marks the training, embargo and Test Set periods.'],
+    ['timelineChart', 'Actual and predicted values over the whole sample; shading marks the training, purge and Test Set periods.'],
     ['mainChart', 'Class scatter of two predictors, coloured by class.']];
   perfFigs.forEach(([id, cap]) => h += v41Fig(id, cap, num));
   h += `<h2>${s++}. Diagnostics</h2>`;
@@ -21894,7 +21896,7 @@ function w44Signature(st) {
     valRaw.join(','), (st.y_val || []).map(v => Number(v).toPrecision(10)).join(',')
   ];
   return { sig: w44Hash(parts.join('#')), parts: {
-    dataset: parts[0], target: parts[1], task: parts[2], features: parts[4], split: `${st.splitStrategy}, ${Math.round((st.trainRatio || 0) * 100)}/${100 - Math.round((st.trainRatio || 0) * 100)}${st.embargoRows ? ', embargo ' + st.embargoRows : ''}`,
+    dataset: parts[0], target: parts[1], task: parts[2], features: parts[4], split: `${st.splitStrategy}, ${Math.round((st.trainRatio || 0) * 100)}/${100 - Math.round((st.trainRatio || 0) * 100)}${st.embargoRows ? ', purge ' + st.embargoRows : ''}`,
     horizon: parts[8], rows: w44Hash(parts[9] + '#' + parts[10]) } };
 }
 
@@ -22405,7 +22407,7 @@ function w44HiddenSettingsDiffs() {
   const ts = (g('splitStrategy') || {}).value === 'time_series';
   if (g('kFolds') && String(g('kFolds').value) !== '5') out.push(`cross-validation folds = ${g('kFolds').value}`);
   if (ts && g('cvScheme') && g('cvScheme').value !== 'expanding') out.push(`CV scheme = ${g('cvScheme').options[g('cvScheme').selectedIndex].text}`);
-  if (ts && g('embargoRows') && Number(g('embargoRows').value) > 0) out.push(`embargo = ${g('embargoRows').value} rows`);
+  if (ts && g('embargoRows') && Number(g('embargoRows').value) > 0) out.push(`purge = ${g('embargoRows').value} rows`);
   if (g('deterministicSampling') && !g('deterministicSampling').checked) out.push('replicable sampling off');
   if (!ts && g('stratifySampling') && !g('stratifySampling').checked) out.push('stratified split off');
   if (g('imbalanceMode') && g('imbalanceMode').checked) out.push('simulated class imbalance on');
@@ -24072,7 +24074,7 @@ function v45RunSettingsRows() {
   if (st.horizon > 0) add('Forecast horizon', `h = ${st.horizon}${st.includeYt ? ', y(t) used as a predictor' : ''}`);
   add('Predictors', `${st.features.length}: ${st.features.map(v41Esc).join(', ')}`);
   add('Rows', `${st.y_train.length} training, ${st.y_val.length} Test Set`);
-  add('Split', (st.splitStrategy === 'time_series' ? 'time series (sequential)' : 'random') + `, ${Math.round(st.trainRatio * 100)}/${100 - Math.round(st.trainRatio * 100)}` + (st.embargoRows ? `, embargo ${st.embargoRows} row(s)` : '') + (st.isDeterministic ? ', replicable sampling' : ''));
+  add('Split', (st.splitStrategy === 'time_series' ? 'time series (sequential)' : 'random') + `, ${Math.round(st.trainRatio * 100)}/${100 - Math.round(st.trainRatio * 100)}` + (st.embargoRows ? `, purge ${st.embargoRows} row(s)` : '') + (st.isDeterministic ? ', replicable sampling' : ''));
   add('Cross-validation', `${st.kFolds} folds, ${(CV_SCHEME_LABELS[st.cvScheme] || st.cvScheme || '').split(' (')[0]}`);
   add('Scaling', v41Esc((document.querySelector(`#scalingType option[value="${st.scalingType}"]`) || {}).textContent || st.scalingType));
   add('Missing values', st.imputeType === 'drop' ? 'incomplete rows dropped' : `${st.imputeType} imputation (training values)`);
@@ -24740,7 +24742,7 @@ function v45VarSelData() {
   const split = v45Val('splitStrategy', 'random');
   const det = !!(document.getElementById('deterministicSampling') || {}).checked;
   const strat = !!(document.getElementById('stratifySampling') || {}).checked;
-  const emb = split === 'time_series' ? Math.max(parseInt(v45Val('embargoRows', '0')) || 0, hz.h > 1 ? hz.h - 1 : 0) : 0;
+  const emb = split === 'time_series' ? Math.max(parseInt(v45Val('embargoRows', '0')) || 0, hz.h > 0 ? hz.h : 0) : 0;
   const trainIdx = v45KeepSeed(() => computeSplitIndices(enc.length, yAll, ratio, split, strat, getRandomFunc(det), isC, emb, enc).trainIdx);
   const rows = trainIdx.map(i => enc[i]);
   const X = rows.map(r => cands.map(f => { const v = r[f]; return v === null || v === undefined || v === '' ? NaN : Number(v); }));
@@ -26776,7 +26778,7 @@ function v48RenderPanelUI() {
   if (p.unit) {
     const U = new Set(rawData.map(r => String(r[p.unit]))).size;
     note.className = 'leakage-hint info'; note.style.display = 'block';
-    note.innerHTML = `<b>Panel data</b>: ${p.nDates} dates × ${U} values of <b>${v41Esc(p.unit)}</b>${p.auto ? ' (found automatically)' : ''}. The target t+h, lags and differences, the random walk and the forecasts beyond the sample are taken <b>within each ${v41Esc(p.unit)}</b>; the time split and the cross-validation folds are cut between dates, and h and the embargo count dates.`;
+    note.innerHTML = `<b>Panel data</b>: ${p.nDates} dates × ${U} values of <b>${v41Esc(p.unit)}</b>${p.auto ? ' (found automatically)' : ''}. The target t+h, lags and differences, the random walk and the forecasts beyond the sample are taken <b>within each ${v41Esc(p.unit)}</b>; the time split and the cross-validation folds are cut between dates, and h and the purge count dates.`;
   } else {
     note.className = 'leakage-hint warn'; note.style.display = 'block';
     note.innerHTML = `<b>${p.dup} row(s) repeat a date</b> of <b>${v41Esc(p.dateCol)}</b>: several rows share each date, as in panel data (regions × months). The next row is then another unit, not the next period, so <b>forecasting is off (h = 0)</b>. ${p.cands.length ? `Choose the column that identifies the unit (${p.cands.map(c => '<b>' + v41Esc(c) + '</b>').join(', ')}) to forecast within each unit.` : 'No column identifies the rows of each date uniquely: check the file for duplicated rows.'}`;
@@ -26813,7 +26815,7 @@ function v48OnUnitChange(v) {
   horizonRefreshLabel = function () {
     const r = oR.apply(this, arguments);
     try {
-      if (v48PanelActive()) { const lab = document.getElementById('horizonTargetLabel'); if (lab) lab.innerHTML = lab.innerHTML.replace(/embargo of at least (\d+) row\(s\)/, 'embargo of at least $1 date(s)'); }
+      if (v48PanelActive()) { const lab = document.getElementById('horizonTargetLabel'); if (lab) lab.innerHTML = lab.innerHTML.replace(/purge of at least (\d+) row\(s\)/, 'purge of at least $1 date(s)'); }
     } catch (e) {}
     return r;
   };
@@ -26853,7 +26855,7 @@ function v48OnUnitChange(v) {
 /* ----- time split and CV folds between dates ----- */
 (function () {
   const o = computeSplitIndices;
-  computeSplitIndices = function (n, y, trainRatio, strategy, shouldStratify, randFunc, isClassification, embargo, rows) {
+  computeSplitIndices = function (n, y, trainRatio, strategy, shouldStratify, randFunc, isClassification, purge, rows) {
     if (strategy === 'time_series' && v48PanelActive() && rows && rows.length === n && n && rows[0].__ri !== undefined) {
       const per0 = v48PeriodOfRaw();
       const P = rows.map(r => per0[r.__ri]);
@@ -26861,7 +26863,7 @@ function v48OnUnitChange(v) {
       const pos = {}; uniq.forEach((p, i) => pos[p] = i);
       const Q = P.map(p => pos[p]);
       const K = uniq.length;
-      const emb = Math.max(0, parseInt(embargo) || 0);
+      const emb = Math.max(0, parseInt(purge) || 0);
       const cut = Math.max(1, Math.min(K - 1, Math.floor(K * trainRatio)));
       const trainIdx = [], valIdx = [];
       Q.forEach((q, i) => { if (q < cut - emb) trainIdx.push(i); else if (q >= cut) valIdx.push(i); });
@@ -26872,10 +26874,10 @@ function v48OnUnitChange(v) {
     return o.apply(this, arguments);
   };
   const oF = buildCvFolds;
-  buildCvFolds = function (n, y, k, isClassification, splitStrategy, embargo, scheme, randFunc) {
+  buildCvFolds = function (n, y, k, isClassification, splitStrategy, purge, scheme, randFunc) {
     const per = V48.periodsByN.get(n);
     if (splitStrategy === 'time_series' && v48PanelActive() && per && per.length === n) {
-      embargo = Math.max(0, parseInt(embargo) || 0);
+      purge = Math.max(0, parseInt(purge) || 0);
       const uniq = Array.from(new Set(per)).sort((a, b) => a - b);
       const pos = {}; uniq.forEach((p, i) => pos[p] = i);
       const Q = per.map(p => pos[p]), K = uniq.length;
@@ -26885,7 +26887,7 @@ function v48OnUnitChange(v) {
         const windowLen = Math.max(1, Math.floor(K / (k + 1)));
         for (let i = 1; i <= k; i++) {
           const vs = Math.floor(K * i / (k + 1)), ve = i === k ? K : Math.floor(K * (i + 1) / (k + 1));
-          const te = Math.max(0, vs - embargo), ts = scheme === 'sliding' ? Math.max(0, te - windowLen) : 0;
+          const te = Math.max(0, vs - purge), ts = scheme === 'sliding' ? Math.max(0, te - windowLen) : 0;
           folds.push({ trainIdx: rowsIn(ts, te), valIdx: rowsIn(vs, ve) });
         }
         return folds;
@@ -26893,7 +26895,7 @@ function v48OnUnitChange(v) {
       const fs = Math.max(1, Math.floor(K / k));
       for (let i = 0; i < k; i++) {
         const vs = i * fs, ve = i === k - 1 ? K : vs + fs;
-        const tr = rowsIn(0, Math.max(0, vs - embargo)).concat(rowsIn(Math.min(K, ve + embargo), K));
+        const tr = rowsIn(0, Math.max(0, vs - purge)).concat(rowsIn(Math.min(K, ve + purge), K));
         folds.push({ trainIdx: tr, valIdx: rowsIn(vs, ve) });
       }
       return folds;
@@ -27409,7 +27411,7 @@ function v48DateRegularity(tokens, order) {
 /* ----- help ----- */
 try {
   [{ title: 'Panel data and the unit column', cat: 'Data', ids: ['v48Unit', 'v48PanelRow'], terms: ['unit column', 'panel data'],
-     text: 'Data with several units (regions, firms, countries) observed at the same dates, one row per unit and date. The app finds the column that identifies the unit (the date and the unit together are unique) and proposes it under Forecast horizon. With a unit column the target t+h, the lags and differences of the Transformations card, the random walk and the forecasts beyond the sample are taken within each unit (as groupby().shift() in pandas); the time split and the cross-validation folds are cut between dates, and h and the embargo count dates. Without a unit column the next row is another unit, so forecasting is switched off (h = 0). Charts over time show one unit at a time. The time-series diagnostics of the Expert view treat all rows as one series.' },
+     text: 'Data with several units (regions, firms, countries) observed at the same dates, one row per unit and date. The app finds the column that identifies the unit (the date and the unit together are unique) and proposes it under Forecast horizon. With a unit column the target t+h, the lags and differences of the Transformations card, the random walk and the forecasts beyond the sample are taken within each unit (as groupby().shift() in pandas); the time split and the cross-validation folds are cut between dates, and h and the purge count dates. Without a unit column the next row is another unit, so forecasting is switched off (h = 0). Charts over time show one unit at a time. The time-series diagnostics of the Expert view treat all rows as one series.' },
    { title: 'Choice of benchmark', cat: 'Metrics', terms: ['benchmark used by the tests', 'stronger benchmark'],
      text: 'On time-ordered data two naive forecasts are computed: the random walk (the last known value) and the training mean. The tests and the "In plain words" summary use the one with the lower error on the training rows, so no Test Set row influences the choice. Persistent series (levels, prices, rates) usually pick the random walk; series without memory (returns, changes, growth rates) pick the mean, against which a model that has learnt nothing gains nothing. Both are shown in the Benchmark Comparison table.' }
   ].forEach(h => { const i = V41_HELP.length; V41_HELP.push(h); (h.ids || []).forEach(id => { V41_HELP_IDS[id] = i; }); h.terms.forEach(t => V41_HELP_TERMS.push({ term: t, idx: i })); });
@@ -30854,10 +30856,10 @@ function v46FoldScore(y, p, isC, key, thr) {
    identical to v4.5.2. Without the 12th argument the original runs. */
 (function () {
   const legacy = executeCrossValidation;
-  executeCrossValidation = function (X, y, k, modelType, params, isClassification, randFunc, scalingType, splitStrategy, embargo, scheme, opts) {
+  executeCrossValidation = function (X, y, k, modelType, params, isClassification, randFunc, scalingType, splitStrategy, purge, scheme, opts) {
     if (!opts || !opts.metric) return legacy.apply(this, arguments);
     scheme = scheme || ((splitStrategy === 'time_series') ? 'expanding' : 'kfold');
-    const folds = buildCvFolds(X.length, y, k, isClassification, splitStrategy, embargo, scheme, randFunc);
+    const folds = buildCvFolds(X.length, y, k, isClassification, splitStrategy, purge, scheme, randFunc);
     const foldScores = [], keep = [];
     let nSkipped = 0, nFallback = 0;
     folds.forEach(f => {
@@ -34152,14 +34154,14 @@ function x47CrossYearCol() {
     return oR.apply(this, arguments);
   };
   const oS = computeSplitIndices;
-  computeSplitIndices = function (n, y, trainRatio, strategy, shouldStratify, randFunc, isClassification, embargo, rows) {
+  computeSplitIndices = function (n, y, trainRatio, strategy, shouldStratify, randFunc, isClassification, purge, rows) {
     const yc = strategy === 'time_series' ? x47CrossYearCol() : null;
     if (yc && rows && rows.length === n && n && rows[0].__ri !== undefined) {
       const P = rows.map(r => { const v = rawData[r.__ri] ? rawData[r.__ri][yc] : NaN; return Number.isFinite(v) ? v : -Infinity; });
       const uniq = Array.from(new Set(P)).sort((a, b) => a - b), K = uniq.length;
       if (K >= 2) {
         const pos = {}; uniq.forEach((p, i) => pos[p] = i);
-        const emb = Math.max(0, parseInt(embargo) || 0);
+        const emb = Math.max(0, parseInt(purge) || 0);
         // the cut: the year boundary closest to the train ratio of the rows
         let best = 1, bestGap = Infinity, acc = 0;
         const cnt = new Array(K).fill(0); P.forEach(p => cnt[pos[p]]++);
@@ -34240,9 +34242,9 @@ function x47FoldRule() {
 }
 (function () {
   const prev = executeCrossValidation;
-  executeCrossValidation = function (X, y, k, modelType, params, isClassification, randFunc, scalingType, splitStrategy, embargo, scheme, opts) {
+  executeCrossValidation = function (X, y, k, modelType, params, isClassification, randFunc, scalingType, splitStrategy, purge, scheme, opts) {
     if (!opts || !opts.metric) return prev.apply(this, arguments);
-    const S = x47CvBegin(X, y, k, modelType, params, isClassification, randFunc, scalingType, splitStrategy, embargo, scheme, opts);
+    const S = x47CvBegin(X, y, k, modelType, params, isClassification, randFunc, scalingType, splitStrategy, purge, scheme, opts);
     while (S.i < S.folds.length) x47CvFold(S);
     return x47CvFinish(S);
   };
@@ -34250,9 +34252,9 @@ function x47FoldRule() {
 /* The cross-validation of one setting in three steps (v4.7): begin (the folds), one fold at a
    time, finish (cutoffs and scores). Run in a row they give exactly the old result; the tuning
    loop runs them as separate steps so the app stays responsive during a run. */
-function x47CvBegin(X, y, k, modelType, params, isClassification, randFunc, scalingType, splitStrategy, embargo, scheme, opts) {
+function x47CvBegin(X, y, k, modelType, params, isClassification, randFunc, scalingType, splitStrategy, purge, scheme, opts) {
   scheme = scheme || ((splitStrategy === 'time_series') ? 'expanding' : 'kfold');
-  const folds = buildCvFolds(X.length, y, k, isClassification, splitStrategy, embargo, scheme, randFunc);
+  const folds = buildCvFolds(X.length, y, k, isClassification, splitStrategy, purge, scheme, randFunc);
   return { X, y, modelType, params, isClassification, randFunc, scalingType, scheme, opts, folds, i: 0, keep: [], nSkipped: 0 };
 }
 function x47CvFold(S) { return q50Drain(q50CvFoldBaseG(S)); }
@@ -35271,7 +35273,7 @@ function x47Sum(g) {
   if (g === 4) {
     const ts = v('splitStrategy') === 'time_series', r = parseInt(v('trainRatio'), 10) || 80, kf = parseInt(v('kFolds'), 10) || 5;
     const sch = { expanding: 'expanding', sliding: 'sliding', purged_kfold: 'purged k-fold' }[v('cvScheme')] || '';
-    return [`${ts ? 'Time series' : 'Random'} ${r}/${100 - r}`, ts ? `${sch} ${kf} folds · embargo ${parseInt(v('embargoRows'), 10) || 0}` : `${kf}-fold CV · seed ${x47Det() ? X47.seed : 'new'}`];
+    return [`${ts ? 'Time series' : 'Random'} ${r}/${100 - r}`, ts ? `${sch} ${kf} folds · purge ${parseInt(v('embargoRows'), 10) || 0}` : `${kf}-fold CV · seed ${x47Det() ? X47.seed : 'new'}`];
   }
   if (g === 5) {
     if (est) { const e = document.getElementById('estEstimator'); return [x47Short(e && e.selectedOptions[0] ? e.selectedOptions[0].text.split(' (')[0] : 'Estimator', 28), 'full sample']; }
@@ -36689,7 +36691,7 @@ function x48Prepare(S) {
   const splitStrategy = document.getElementById('splitStrategy').value;
   const isDeterministic = document.getElementById('deterministicSampling').checked;
   const shouldStratify = document.getElementById('stratifySampling').checked;
-  const embargoRows = splitStrategy === 'time_series' ? Math.max(parseInt(document.getElementById('embargoRows')?.value) || 0, S.hz.h > 1 ? S.hz.h - 1 : 0) : 0;
+  const embargoRows = splitStrategy === 'time_series' ? Math.max(parseInt(document.getElementById('embargoRows')?.value) || 0, S.hz.h > 0 ? S.hz.h : 0) : 0;
   const randFunc = getRandomFunc(isDeterministic);
   const { trainIdx, valIdx } = computeSplitIndices(encoded.length, y, trainRatio, splitStrategy, shouldStratify, randFunc, true, embargoRows, encoded);
   let trainRows = trainIdx.map(i => encoded[i]), valRows = valIdx.map(i => encoded[i]);
@@ -36875,7 +36877,7 @@ function x48RecordRun(run) {
   const base = {
     dataset: (typeof currentDatasetFileName !== 'undefined' && currentDatasetFileName) || 'dataset',
     target: targetCol + (S.hzRes.h ? ` (t+${S.hzRes.h})` : ''), nFeat: features.length, features: features.join(', '),
-    split: (S.splitStrategy === 'time_series' ? `time series${S.embargoRows ? ', embargo ' + S.embargoRows : ''}` : 'random') + `, seed ${st.x47Seed}`,
+    split: (S.splitStrategy === 'time_series' ? `time series${S.embargoRows ? ', purge ' + S.embargoRows : ''}` : 'random') + `, seed ${st.x47Seed}`,
     ratio: Math.round(S.trainRatio * 100), cv: `${S.kFolds}-fold ${(CV_SCHEME_LABELS[S.cvScheme] || S.cvScheme || '').split(' (')[0]}`,
     scaling: S.scalingType, isClass: true, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     nTrain: S.Xtr0.length, nVal: S.Xva0.length, x48k: S.k
@@ -37019,7 +37021,7 @@ function x48RenderSettings(run) {
   if (S.hzRes.h > 0) add('Forecast horizon', `h = ${S.hzRes.h}${S.ytCols.length ? `, y(t) used as a predictor (${S.ytCols.length} class columns)` : ''}`);
   add('Predictors', `${features.length}: ${features.map(x48E).join(', ')}`);
   add('Rows', `${S.Xtr0.length} training, ${S.Xva0.length} Test Set`);
-  add('Split', (S.splitStrategy === 'time_series' ? 'time series (sequential)' : 'random') + `, ${Math.round(S.trainRatio * 100)}/${100 - Math.round(S.trainRatio * 100)}` + (S.embargoRows ? `, embargo ${S.embargoRows} row(s)` : '') + `, seed ${globalState.x47Seed}${S.isDeterministic ? ' (replicable)' : ' (drawn for this run)'}`);
+  add('Split', (S.splitStrategy === 'time_series' ? 'time series (sequential)' : 'random') + `, ${Math.round(S.trainRatio * 100)}/${100 - Math.round(S.trainRatio * 100)}` + (S.embargoRows ? `, purge ${S.embargoRows} row(s)` : '') + `, seed ${globalState.x47Seed}${S.isDeterministic ? ' (replicable)' : ' (drawn for this run)'}`);
   add('Cross-validation', `${S.kFolds} folds, ${(CV_SCHEME_LABELS[S.cvScheme] || S.cvScheme || '').split(' (')[0]}`);
   add('Scaling', x48E((document.querySelector(`#scalingType option[value="${S.scalingType}"]`) || {}).textContent || S.scalingType));
   add('Missing values', S.imputeType === 'drop' ? 'incomplete rows dropped' : `${S.imputeType} imputation (training values)`);
@@ -49044,10 +49046,10 @@ function q52JumpTo(el) {
   let p = el.parentElement;
   while (p) { if (p.tagName === 'DETAILS' && !p.open) p.open = true; p = p.parentElement; }
   setTimeout(() => {
-    if (!el.offsetParent && el.type !== 'hidden') {          // hidden by another setting (e.g. the embargo needs the Time-Series split)
+    if (!el.offsetParent && el.type !== 'hidden') {          // hidden by another setting (e.g. the purge needs the Time-Series split)
       const pop = document.getElementById('q52SearchPop');
       const host = el.closest('[id]');
-      if (pop) { pop.style.display = ''; pop.innerHTML = `<div class="q52-sask"><b>${q52Esc(q52SearchText(el) || 'This setting')}</b> is hidden with the current settings: it appears when it applies (for example, the embargo with the Time-Series split). The group that holds it is open.</div>`; }
+      if (pop) { pop.style.display = ''; pop.innerHTML = `<div class="q52-sask"><b>${q52Esc(q52SearchText(el) || 'This setting')}</b> is hidden with the current settings: it appears when it applies (for example, the purge with the Time-Series split). The group that holds it is open.</div>`; }
       return;
     }
     const target = el.closest('label, .checkbox-container, .ts-inline > div') || el;
