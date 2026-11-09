@@ -4476,6 +4476,16 @@ function directionalAccuracy(yTrue, yPred, prevY) {
 /* Diebold-Mariano (1995) with the Harvey-Leybourne-Newbold (1997)
    small-sample correction.  loss: 'squared' or 'absolute'.
    Positive DM => model 1 has the LARGER loss (model 2 is better). */
+/* v5.9: forecast horizon for the Diebold-Mariano test. With a direct
+   h-step-ahead forecast consecutive forecast errors overlap, so the
+   long-run variance uses lags up to h - 1 and the Harvey-Leybourne-Newbold
+   correction uses h. Same-row (h = 0) and one-step forecasts use h = 1. */
+function dmH(st) {
+  st = st || (typeof globalState !== 'undefined' ? globalState : null) || {};
+  const h = Math.floor(Number(st.horizon));
+  return h > 1 ? h : 1;
+}
+
 function dieboldMariano(e1, e2, h, loss) {
   h = h || 1; loss = loss || 'squared';
   const L = loss === 'absolute' ? (e => Math.abs(e)) : (e => e * e);
@@ -13939,12 +13949,12 @@ function renderOOSResults(rowsRaw, preds, featureRows) {
 
     const e1 = yTrue.map((v, i) => v - yHat[i]);
     const e2 = yTrue.map((v, i) => v - bmPred[i]);
-    const dm = dieboldMariano(e1, e2, 1, 'squared');
+    const dm = dieboldMariano(e1, e2, dmH(st), 'squared');
     if (Number.isFinite(dm.dm)) {
       const verdict = dm.p >= 0.10 ? 'cannot be distinguished from the benchmark on these data'
         : (dm.dm < 0 ? '<b>beats</b> the benchmark significantly' : 'is <b>beaten by</b> the benchmark significantly');
       html += `<div style="font-size:12px; margin-top:8px; padding:8px; background:#f8fafc; border:1px solid var(--border); border-radius:6px;">
-        <b>Diebold-Mariano test</b> on the uploaded data (squared-error loss, h=1, HLN correction): DM = ${dm.dm.toFixed(3)}, p = ${dm.p.toFixed(4)}, n = ${dm.n}. The model ${verdict}.</div>`;
+        <b>Diebold-Mariano test</b> on the uploaded data (squared-error loss, h=${dmH(st)}, HLN correction): DM = ${dm.dm.toFixed(3)}, p = ${dm.p.toFixed(4)}, n = ${dm.n}. The model ${verdict}.</div>`;
     }
     if (seq) {
       const da = directionalAccuracy(yTrue, yHat, prev);
@@ -14427,7 +14437,7 @@ function renderBenchmarkPanel() {
   // Diebold-Mariano against the primary benchmark
   const e1 = st.y_val.map((v, i) => v - st.rawValOutputs[i]);
   const e2 = st.y_val.map((v, i) => v - bm.pred[i]);
-  const dm = dieboldMariano(e1, e2, 1, 'squared');
+  const dm = dieboldMariano(e1, e2, dmH(st), 'squared');
   const bname = bm.isRW ? 'random walk' : 'benchmark';
   if (Number.isFinite(dm.dm)) {
     const verdict = dm.p >= 0.10
@@ -14436,11 +14446,11 @@ function renderBenchmarkPanel() {
         ? `The model's squared forecast error is <b>significantly lower</b> than the ${bname}'s.`
         : `The ${bname}'s squared forecast error is <b>significantly lower</b> than the model's.`);
     html += `<div class="v42-testbox" style="font-size:12px; margin-top:8px; padding:8px; background:var(--surface, #f8fafc); border:1px solid var(--border); border-radius:6px;">
-      <b>Diebold-Mariano test</b> against the ${bname} (squared-error loss, h=1, Harvey-Leybourne-Newbold small-sample correction):
+      <b>Diebold-Mariano test</b> against the ${bname} (squared-error loss, h=${dmH(st)}, Harvey-Leybourne-Newbold small-sample correction):
       DM = ${dm.dm.toFixed(3)}, p = ${dm.p.toFixed(4)}, n = ${dm.n}. ${verdict}</div>`;
   }
   // Clark-West: the benchmark is nested in the model
-  const cw = clarkWestTest(st.y_val, st.rawValOutputs, bm.pred, 1);
+  const cw = clarkWestTest(st.y_val, st.rawValOutputs, bm.pred, dmH(st));   // v5.9: horizon h
   st.clarkWest = Object.assign({ benchmark: bname }, cw);
   if (Number.isFinite(cw.stat)) {
     const v = cw.p < 0.05
@@ -19196,7 +19206,7 @@ function estRenderEconBenchmark() {
   const scale = naiveScale(st.y_train);
   const who = st.showingEnsemble && st.focusAlgoLabel ? st.focusAlgoLabel : 'ML model';
   const eM = yv.map((v, i) => v - pm[i]), eE = yv.map((v, i) => v - pe[i]);
-  const dm = dieboldMariano(eM, eE, 1, 'squared');
+  const dm = dieboldMariano(eM, eE, dmH(st), 'squared');
   const nNaN = pe.filter(v => !Number.isFinite(v)).length;
   const row = (nm, a, bb, c, d) => `<tr><td class="name">${nm}</td><td class="num">${estFmt(a, d)}</td><td class="num">${estFmt(bb, d)}</td><td class="num">${c == null ? '–' : estFmt(c, d)}</td></tr>`;
   let h = head + `<div class="est-muted" style="margin-bottom:6px;">Parameters estimated only on the training rows (up to ${estEsc(estRowLabel(lastTrain))}); one-step-ahead forecasts for the ${yv.length} Test Set rows, using the actual values of earlier periods and, for models with regressors, the contemporaneous regressors, exactly as the ML model uses its features.</div>
@@ -20959,7 +20969,7 @@ function v41RunMetrics(isClass, yTr, yVal, rawVal, st) {
       const mb = computeRegMetrics(yVal, b.pred);
       out.rel = mb.rmse > 0 ? m.rmse / mb.rmse : NaN;
       const e1 = yVal.map((v, i) => v - rawVal[i]), e2 = yVal.map((v, i) => v - b.pred[i]);
-      const dm = dieboldMariano(e1, e2, 1);
+      const dm = dieboldMariano(e1, e2, dmH(st));
       out.dmp = dm ? dm.p : NaN;
       out.bench = b.isRW ? 'random walk' : 'training mean';
     }
@@ -23882,7 +23892,7 @@ v41RunMetrics = function (isClass, yTr, yVal, rawVal, st) {
       out.rel = mb.rmse > 0 ? m.rmse / mb.rmse : NaN;
       out.benchRmse = mb.rmse;
       const e1 = yVal.map((v, i) => v - rawVal[i]), e2 = yVal.map((v, i) => v - b.pred[i]);
-      const dm = dieboldMariano(e1, e2, 1);
+      const dm = dieboldMariano(e1, e2, dmH(st));
       out.dmp = dm ? dm.p : NaN;
       out.bench = b.isRW ? 'random walk' : 'training mean';
     }
@@ -29045,7 +29055,7 @@ if cv_all:
     const lb = ljungBox(resid, hLB), jb = jarqueBera(resid);
     const bm = buildNaiveBenchmark(st);
     let dmApp = null;
-    if (bm) dmApp = dieboldMariano(st.y_val.map((v, i) => v - st.rawValOutputs[i]), st.y_val.map((v, i) => v - bm.pred[i]), 1, 'squared');
+    if (bm) dmApp = dieboldMariano(st.y_val.map((v, i) => v - st.rawValOutputs[i]), st.y_val.map((v, i) => v - bm.pred[i]), dmH(st), 'squared');
     S.push(`
 # ---- 3. Diagnostics of the Test Set residuals ----
 def ljung_box(e, h):
@@ -29074,7 +29084,7 @@ jb, p = jarque_bera(res_va)
 print(f"Jarque-Bera {jb:.4f}, p {p:.4f}   ({${v451PyNum(jb.stat)}:.4f}, p {${v451PyNum(jb.p)}:.4f})")
 ${bm && dmApp && Number.isFinite(dmApp.dm) ? `BENCH = ${v451PyArr(bm.pred)}    # ${bm.label}, as computed by 4Cast Lab
 if len(BENCH) == len(y_va):
-    dm, p = diebold_mariano(res_va, y_va - BENCH)
+    dm, p = diebold_mariano(res_va, y_va - BENCH, ${dmH(st)})
     print(f"Diebold-Mariano vs ${bm.isRW ? 'random walk' : 'training mean'}: {dm:.4f}, p {p:.4f}   ({${v451PyNum(dmApp.dm)}:.4f}, p {${v451PyNum(dmApp.p)}:.4f})")` : '# (no benchmark for the Diebold-Mariano test in this run)'}
 `);
   }
@@ -37141,10 +37151,10 @@ function x48RenderEval(run) {
   const L0 = x48RowLoss(y, R.PVa), ok0 = R.PVa.map((p, i) => x48Argmax(p) === y[i] ? 1 : 0);
   const others = Object.values(run.bench).map(b => ({ label: b.label + ' (benchmark)', P: b.P, bench: true })).concat(run.results.filter((Q, i) => i !== run.focus).map(Q => ({ label: Q.label, P: Q.PVa })));
   const nCmp = others.length;
-  let h = `<div class="x48-sub">The model used in the other tabs, <b>${x48E(x48ModelName(run))}</b>, against each benchmark and each other model, on the same ${y.length} Test Set rows. Log loss: Diebold-Mariano test on the per-row log loss (h = 1, Harvey-Leybourne-Newbold correction); accuracy: McNemar test on right / wrong (exact binomial when fewer than 25 discordant rows). Holm-adjusted p-values account for the ${nCmp} comparisons.</div>`;
+  let h = `<div class="x48-sub">The model used in the other tabs, <b>${x48E(x48ModelName(run))}</b>, against each benchmark and each other model, on the same ${y.length} Test Set rows. Log loss: Diebold-Mariano test on the per-row log loss (h = ${dmH()}, Harvey-Leybourne-Newbold correction); accuracy: McNemar test on right / wrong (exact binomial when fewer than 25 discordant rows). Holm-adjusted p-values account for the ${nCmp} comparisons.</div>`;
   const rows = others.map(o => {
     const L1 = x48RowLoss(y, o.P), ok1 = o.P.map((p, i) => x48Argmax(p) === y[i] ? 1 : 0);
-    const dm = dieboldMariano(L0.map(Math.sqrt), L1.map(Math.sqrt), 1);
+    const dm = dieboldMariano(L0.map(Math.sqrt), L1.map(Math.sqrt), dmH());
     const mc = x48McNemar(ok0, ok1);
     return { o, ll0: L0.reduce((a, b) => a + b, 0) / y.length, ll1: L1.reduce((a, b) => a + b, 0) / y.length, acc0: ok0.reduce((a, b) => a + b, 0) / y.length, acc1: ok1.reduce((a, b) => a + b, 0) / y.length, dm, mc };
   });
@@ -40807,7 +40817,7 @@ function x491BenchMC(R, r) {
   const shares = Array.from({ length: k }, (_, c) => Math.max(1e-15, Number(sh[c]) || 0));
   const ll = (P, i) => -Math.log(Math.min(1, Math.max(1e-15, P[i][yva[i]])));
   const lm = yva.map((_, i) => ll(r.PVa, i)), lb = yva.map(c => -Math.log(shares[c]));
-  const t = dieboldMariano(lm.map(Math.sqrt), lb.map(Math.sqrt), 1, 'squared');
+  const t = dieboldMariano(lm.map(Math.sqrt), lb.map(Math.sqrt), dmH(), 'squared');
   const vM = x491Mean(lm), vB = x491Mean(lb);
   return { label: 'class shares of the training rows', vM, vB, adv: vB - vM, p: t.p, test: 'Diebold-Mariano on the log loss of each row', metric: 'log loss', fmt: v => Number.isFinite(v) ? v.toFixed(4) : 'N/A' };
 }
@@ -49269,7 +49279,7 @@ function q52CmpTestHTML(runs, isC) {
       const cl = v => Math.min(1 - 1e-15, Math.max(1e-15, v));
       const loss = key === 'brier' ? ((v, p) => (p - v) ** 2) : ((v, p) => -(v ? Math.log(cl(p)) : Math.log(1 - cl(p))));
       const La = y.map((v, k) => loss(v, A.pred[k])), Lb = y.map((v, k) => loss(v, B.pred[k]));
-      t = w44DM(La, Lb, 1); testName = `Diebold-Mariano (${key === 'brier' ? 'Brier' : 'log loss'} per row)`; better = t.dbar < 0 ? i : j;
+      t = w44DM(La, Lb, A.h || 1); testName = `Diebold-Mariano (${key === 'brier' ? 'Brier' : 'log loss'} per row)`; better = t.dbar < 0 ? i : j;
     } else if (key === 'auc') {
       t = w44DeLong(y, A.pred, B.pred); testName = 'DeLong (AUC)'; better = t.diff > 0 ? i : j;
     } else {
