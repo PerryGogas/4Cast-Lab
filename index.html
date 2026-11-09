@@ -2511,7 +2511,7 @@ body.dark .x54-learn-ic.qs { background: #475569; }
           <div id="leakageHint" class="leakage-hint warn" style="display:block;"><strong>Warning:</strong> Random Sampling Split provides no protection against data leakage. If the target or any feature is computed over a rolling window (e.g. rolling Sharpe, moving average, RSI, volatility over N periods), time-adjacent observations are nearly identical and may end up split between the training set and the Test Set, artificially inflating the Test Set score (especially for KNN, decision trees, Random Forest). If this applies to your data, prefer Time-Series (Sequential Split).</div>
 
           <div id="embargoContainer" style="display:none;">
-            <label>Purge / Gap Before the Test Set (rows) <span class="info-hint" title="Removes this many rows from the end of the training period, immediately before the Test Set period starts, and from the end of the fitting part before each validation fold. A row is purged when its target falls inside the period being predicted, which the model could not have known when it was trained. 4Cast Lab always purges at least h rows (h = periods ahead). Set more if the target or a feature is built over a window. Called purging in López de Prado (2018) and a gap in scikit-learn.">?</span></label>
+            <label>Purge / Gap Before the Test Set (rows) <span class="info-hint" title="Removes this many rows from the end of the training period, immediately before the Test Set period starts, and from the end of the fitting part before each validation fold. When you set a forecast horizon h, 4Cast Lab shifts the target by h before the split, so each row is already a complete pair and no purge is needed (the same holds if you import a target already shifted by h). Set a purge if the target or a feature is built over a window of several periods. Called purging in López de Prado (2018) and a gap in scikit-learn.">?</span></label>
             <input type="number" id="embargoRows" value="0" min="0">
           </div>
 
@@ -8124,10 +8124,10 @@ function runPipeline() {
     const splitStrategy = document.getElementById('splitStrategy').value;
     const isDeterministic = document.getElementById('deterministicSampling').checked;
     const shouldStratify = document.getElementById('stratifySampling').checked;
-    // with h >= 1 the targets of the last h training rows fall inside the
-    // validation period (the model is trained at the end of the training
-    // set), so the purge is at least h rows
-    const embargoRows = splitStrategy === 'time_series' ? Math.max(parseInt(document.getElementById('embargoRows')?.value) || 0, __hz.h > 0 ? __hz.h : 0) : 0;
+    // y is shifted by h over the whole file before the split, so every
+    // row is already a complete pair (x_t, y_t+h) and no training y is a
+    // Test Set y: no automatic purge; only the Purge setting applies
+    const embargoRows = splitStrategy === 'time_series' ? Math.max(parseInt(document.getElementById('embargoRows')?.value) || 0, 0) : 0;   // no automatic purge: y is shifted by h before the split
     const randFunc = getRandomFunc(isDeterministic);
 
     const { trainIdx, valIdx } = computeSplitIndices(encoded.length, y, trainRatio, splitStrategy, shouldStratify, randFunc, isClassification, embargoRows, encoded);
@@ -8250,7 +8250,7 @@ function runPipeline() {
             yAll: y, timeOrdered: timeOrderInfo().ok,   // v4.2: random-walk benchmark under either split
             horizon: __hzRes.h, includeYt: !!__hzRes.ytName, ytName: __hzRes.ytName, yOriginFull: __hzRes.yOrigin,   // v4.3
             yOriginTrain: trainIdx.map(i => __hzRes.yOrigin[rawRowIdx[i]]),
-            embargoAuto: __hz.h > 0 && splitStrategy === 'time_series' ? __hz.h : 0
+            embargoAuto: 0
           };
           globalState.v45 = __v45.info;
           globalState.v45raw = __v45Raw;
@@ -8365,10 +8365,10 @@ function runTrainAll() {
     const splitStrategy = document.getElementById('splitStrategy').value;
     const isDeterministic = document.getElementById('deterministicSampling').checked;
     const shouldStratify = document.getElementById('stratifySampling').checked;
-    // with h >= 1 the targets of the last h training rows fall inside the
-    // validation period (the model is trained at the end of the training
-    // set), so the purge is at least h rows
-    const embargoRows = splitStrategy === 'time_series' ? Math.max(parseInt(document.getElementById('embargoRows')?.value) || 0, __hz.h > 0 ? __hz.h : 0) : 0;
+    // y is shifted by h over the whole file before the split, so every
+    // row is already a complete pair (x_t, y_t+h) and no training y is a
+    // Test Set y: no automatic purge; only the Purge setting applies
+    const embargoRows = splitStrategy === 'time_series' ? Math.max(parseInt(document.getElementById('embargoRows')?.value) || 0, 0) : 0;   // no automatic purge: y is shifted by h before the split
     const randFunc = getRandomFunc(isDeterministic);
 
     const { trainIdx, valIdx } = computeSplitIndices(encoded.length, y, trainRatio, splitStrategy, shouldStratify, randFunc, isClassification, embargoRows, encoded);
@@ -8435,7 +8435,7 @@ function runTrainAll() {
       yAll: y, timeOrdered: timeOrderInfo().ok,   // v4.2
       horizon: __hzRes.h, includeYt: !!__hzRes.ytName, ytName: __hzRes.ytName, yOriginFull: __hzRes.yOrigin,   // v4.3
       yOriginTrain: trainIdx.map(i => __hzRes.yOrigin[rawRowIdx[i]]),
-      embargoAuto: __hz.h > 0 && splitStrategy === 'time_series' ? __hz.h : 0
+      embargoAuto: 0
     };
 
     const algorithms = (typeof q68Pick === 'function' ? q68Pick : (a => a))([
@@ -10915,7 +10915,7 @@ function corrPreviewData() {
     const split = (document.getElementById('splitStrategy') || {}).value || 'random';
     const det = !!(document.getElementById('deterministicSampling') || {}).checked;
     const strat = !!(document.getElementById('stratifySampling') || {}).checked;
-    const emb = split === 'time_series' ? Math.max(parseInt((document.getElementById('embargoRows') || {}).value) || 0, hz.h > 0 ? hz.h : 0) : 0;
+    const emb = split === 'time_series' ? Math.max(parseInt((document.getElementById('embargoRows') || {}).value) || 0, 0) : 0;   // no automatic purge: y is shifted by h before the split
     const isClass = checkIsClassification(y);
     const saved = (typeof currentSeed !== 'undefined') ? currentSeed : null;
     let trainIdx = null;
@@ -11528,7 +11528,7 @@ function horizonRefreshLabel() {
   const tgt = (document.getElementById('targetSelect') || {}).value || '';
   const hz = horizonSettings();
   if (lab) lab.innerHTML = hz.h > 0
-    ? `Modelled target: <b>${impEsc(horizonLabel(tgt, hz.h))}</b>${hz.includeYt ? ` · predictor added: <b>${impEsc(horizonYtName(tgt))}</b>` : ''}${hz.h > 0 ? ` · purge of at least ${hz.h} row(s) under the Time-Series split` : ''}`
+    ? `Modelled target: <b>${impEsc(horizonLabel(tgt, hz.h))}</b>${hz.includeYt ? ` · predictor added: <b>${impEsc(horizonYtName(tgt))}</b>` : ''}`
     : `Modelled target: <b>${impEsc(tgt)}</b> (same row, no shift)`;
   const yRow = document.getElementById('horizonYtRow');
   if (yRow) yRow.style.opacity = hz.h > 0 ? '1' : '0.5';
@@ -20283,7 +20283,7 @@ const V41_HELP = [
   { title: 'Train / Test Set split', cat: 'Evaluation', ids: ['splitStrategy'], terms: ['train / test set split', 'validation splitting logic'],
     text: '<b>Random</b> sampling suits independent observations (cross-sections). <b>Time-series</b> keeps the order: the model is trained on the past and validated on the most recent rows, as in real forecasting. Use it for any data with a time dimension.' },
   { title: 'Purge', cat: 'Evaluation', ids: ['embargoRows'], terms: ['purge', 'purging', 'gap', 'embargo'],
-    text: 'Rows removed from the end of the training data just before the Test Set, and before each validation fold, because their target falls inside the period being predicted: when the model is trained those values are not yet known. The minimum is h rows, h being the number of periods ahead; 4Cast Lab applies it automatically. When a target or feature is computed over a window (a 12-month growth rate, a moving average), set the purge at least equal to the window length. Called purging in López de Prado (2018) and a gap in scikit-learn; there, an embargo is a buffer after a validation fold, used in purged k-fold.' },
+    text: 'Rows removed from the end of the training data just before the Test Set, and before each validation fold, because their target falls inside the period being predicted: when the model is trained those values are not yet known. When the target is shifted by h before the split (4Cast Lab does this when you set a forecast horizon, or you import an already shifted target), no purge is needed: each row is a complete pair and no training target is a Test Set target. A purge of h rows is needed only when the pairs are formed after the split. When a target or feature is computed over a window (a 12-month growth rate, a moving average), set the purge at least equal to the window length. Called purging in López de Prado (2018) and a gap in scikit-learn; there, an embargo is a buffer after a validation fold, used in purged k-fold.' },
   { title: 'Replicable sampling', cat: 'Evaluation', ids: ['deterministicSampling'], terms: ['replicable (deterministic) sampling'],
     text: 'Fixes the random seed (42), so splits, random forests, neural networks and bootstraps give the same numbers every run. Keep it on for teaching and for any result you report.' },
   { title: 'Stratified split', cat: 'Evaluation', ids: ['stratifySampling'], terms: ['stratify sample ratios'],
@@ -24742,7 +24742,7 @@ function v45VarSelData() {
   const split = v45Val('splitStrategy', 'random');
   const det = !!(document.getElementById('deterministicSampling') || {}).checked;
   const strat = !!(document.getElementById('stratifySampling') || {}).checked;
-  const emb = split === 'time_series' ? Math.max(parseInt(v45Val('embargoRows', '0')) || 0, hz.h > 0 ? hz.h : 0) : 0;
+  const emb = split === 'time_series' ? Math.max(parseInt(v45Val('embargoRows', '0')) || 0, 0) : 0;   // no automatic purge: y is shifted by h before the split
   const trainIdx = v45KeepSeed(() => computeSplitIndices(enc.length, yAll, ratio, split, strat, getRandomFunc(det), isC, emb, enc).trainIdx);
   const rows = trainIdx.map(i => enc[i]);
   const X = rows.map(r => cands.map(f => { const v = r[f]; return v === null || v === undefined || v === '' ? NaN : Number(v); }));
@@ -36691,7 +36691,7 @@ function x48Prepare(S) {
   const splitStrategy = document.getElementById('splitStrategy').value;
   const isDeterministic = document.getElementById('deterministicSampling').checked;
   const shouldStratify = document.getElementById('stratifySampling').checked;
-  const embargoRows = splitStrategy === 'time_series' ? Math.max(parseInt(document.getElementById('embargoRows')?.value) || 0, S.hz.h > 0 ? S.hz.h : 0) : 0;
+  const embargoRows = splitStrategy === 'time_series' ? Math.max(parseInt(document.getElementById('embargoRows')?.value) || 0, 0) : 0;   // no automatic purge: y is shifted by h before the split
   const randFunc = getRandomFunc(isDeterministic);
   const { trainIdx, valIdx } = computeSplitIndices(encoded.length, y, trainRatio, splitStrategy, shouldStratify, randFunc, true, embargoRows, encoded);
   let trainRows = trainIdx.map(i => encoded[i]), valRows = valIdx.map(i => encoded[i]);
