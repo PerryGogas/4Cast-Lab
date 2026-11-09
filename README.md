@@ -43,7 +43,7 @@ BibTeX:
   title     = {{4Cast Lab}},
   year      = {2026},
   publisher = {Zenodo},
-  version   = {5.9},
+  version   = {5.9.1},
   doi       = {10.5281/zenodo.22883216},
   url       = {https://doi.org/10.5281/zenodo.22883216}
 }
