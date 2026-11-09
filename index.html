@@ -2280,6 +2280,7 @@ body.dark .x54-learn-ic.qs { background: #475569; }
               <input type="number" id="horizonH" min="0" max="365" step="1" value="0" style="width:90px;" onchange="onHorizonChange()" oninput="onHorizonChange()">
               <label class="checkbox-container" id="horizonYtRow" style="margin:0;"><input type="checkbox" id="horizonIncludeYt" checked onchange="onHorizonChange()"> Use the current value y(t) as a predictor</label>
             </div>
+            <label class="checkbox-container" id="horizonShiftedRow" style="margin:4px 0 0 0;" title="Tick this if the target column in your file already holds the value h rows ahead (you shifted it before importing). 4Cast Lab then does not shift it again, but still uses h for the random-walk benchmark, the tests and the reports. Leave it unticked for raw data, where the predictors and the target of a row have the same date."><input type="checkbox" id="horizonPreShifted" onchange="onHorizonChange()"> The target in my file is already shifted by h rows (do not shift it again)</label>
             <div id="horizonTargetLabel" style="font-size:11.5px; margin-top:4px;"></div>
             <div id="horizonNote" style="font-size:11px; color:var(--muted); margin-top:2px;"></div>
           </div>
@@ -5622,7 +5623,8 @@ async function saveSession(buildOnly) {
       olsCovType: document.getElementById('olsCovType') ? document.getElementById('olsCovType').value : 'hac',
       probThreshold: document.getElementById('probThreshold') ? document.getElementById('probThreshold').value : '0.50',
       taskType: document.getElementById('taskTypeSelect') ? document.getElementById('taskTypeSelect').value : 'auto',   // v4.2
-      horizon: horizonSettings().h, horizonIncludeYt: !!(document.getElementById('horizonIncludeYt') || {}).checked   // v4.3
+      horizon: horizonSettings().h, horizonIncludeYt: !!(document.getElementById('horizonIncludeYt') || {}).checked,   // v4.3
+      horizonPreShifted: horizonSettings().preShifted   // v5.9
     },
     metaVars: Array.from(userMetaVars),
     positiveLabel: currentPositiveLabel,
@@ -5746,7 +5748,7 @@ function loadSession(e) {
       setVal('probThreshold', s.probThreshold);
       setVal('taskTypeSelect', s.taskType || 'auto');
       // v4.3: sessions saved before v4.3 had no horizon: h = 0 reproduces them
-      horizonRestore = { h: Number.isFinite(s.horizon) ? s.horizon : 0, includeYt: s.horizonIncludeYt !== undefined ? !!s.horizonIncludeYt : true };
+      horizonRestore = { h: Number.isFinite(s.horizon) ? s.horizon : 0, includeYt: s.horizonIncludeYt !== undefined ? !!s.horizonIncludeYt : true, preShifted: !!s.horizonPreShifted };
       setTimeout(() => { horizonApplyDefault('load'); horizonRestore = null; }, 400);
       toggleANNConfig();
       toggleSVMConfig();
@@ -8248,7 +8250,7 @@ function runPipeline() {
             positiveLabel: currentPositiveLabel, negativeLabel: currentNegativeLabel,
             trainIdx, valIdx, encodedRowCount: encoded.length, rawRowIdx,
             yAll: y, timeOrdered: timeOrderInfo().ok,   // v4.2: random-walk benchmark under either split
-            horizon: __hzRes.h, includeYt: !!__hzRes.ytName, ytName: __hzRes.ytName, yOriginFull: __hzRes.yOrigin,   // v4.3
+            horizon: __hzRes.h, horizonPreShifted: !!__hzRes.preShifted, includeYt: !!__hzRes.ytName, ytName: __hzRes.ytName, yOriginFull: __hzRes.yOrigin,   // v4.3; v5.9
             yOriginTrain: trainIdx.map(i => __hzRes.yOrigin[rawRowIdx[i]]),
             embargoAuto: 0
           };
@@ -8433,7 +8435,7 @@ function runTrainAll() {
       trainIdx, valIdx, encodedRowCount: encoded.length, rawRowIdx,
       tunedEnsemble: tuneAll, hpMode: hpModeAll, v45raw: __v45Raw,
       yAll: y, timeOrdered: timeOrderInfo().ok,   // v4.2
-      horizon: __hzRes.h, includeYt: !!__hzRes.ytName, ytName: __hzRes.ytName, yOriginFull: __hzRes.yOrigin,   // v4.3
+      horizon: __hzRes.h, horizonPreShifted: !!__hzRes.preShifted, includeYt: !!__hzRes.ytName, ytName: __hzRes.ytName, yOriginFull: __hzRes.yOrigin,   // v4.3; v5.9
       yOriginTrain: trainIdx.map(i => __hzRes.yOrigin[rawRowIdx[i]]),
       embargoAuto: 0
     };
@@ -11475,7 +11477,8 @@ function horizonSettings() {
   if (!Number.isFinite(h) || h < 0) h = 0;
   if (!horizonAvailable()) h = 0;
   if (typeof appMode !== 'undefined' && appMode === 'estimation') h = 0;
-  return { h, includeYt: !!(yEl && yEl.checked) && h > 0 };
+  const psEl = document.getElementById('horizonPreShifted');   // v5.9
+  return { h, includeYt: !!(yEl && yEl.checked) && h > 0, preShifted: !!(psEl && psEl.checked) && h > 0 };
 }
 
 function horizonYtName(target) { return `${target} (t)`; }
@@ -11508,13 +11511,15 @@ function horizonApplyDefault(reason) {
   if (horizonRestore) {   // a session being loaded keeps its own horizon
     hEl.value = String(horizonRestore.h);
     if (yEl) yEl.checked = horizonRestore.includeYt;
+    { const ps = document.getElementById('horizonPreShifted'); if (ps) ps.checked = !!horizonRestore.preShifted; }   // v5.9
     if (note) note.innerHTML = 'Horizon restored from the session.';
     horizonRefreshLabel();
     return;
   }
+  { const ps = document.getElementById('horizonPreShifted'); if (ps) ps.checked = false; }   // v5.9: a new target starts as raw data
   if (HZ_SHIFTED_NAME.test(tgt)) {
     hEl.value = '0';
-    if (note) note.innerHTML = `The name <b>${impEsc(tgt)}</b> suggests it already holds a future value, so h = 0 (no further shift). Set h = 1 or more if it is a same-period variable.`;
+    if (note) note.innerHTML = `The name <b>${impEsc(tgt)}</b> suggests it already holds a future value, so h = 0 (no further shift). If it is shifted by k rows, set h = k and tick "already shifted" so the benchmark, the tests and the reports use the right horizon. Set h = 1 or more without the tick if it is a same-period variable.`;
   } else {
     hEl.value = '1';
     if (note) note.innerHTML = `Each row's predictors (dated t) are used to forecast <b>${impEsc(tgt)}</b> h rows later. h counts rows, so with gaps (weekends) t+1 after a Friday is the next available row. Set h = 0 to explain the same-period value instead of forecasting it.`;
@@ -11528,7 +11533,7 @@ function horizonRefreshLabel() {
   const tgt = (document.getElementById('targetSelect') || {}).value || '';
   const hz = horizonSettings();
   if (lab) lab.innerHTML = hz.h > 0
-    ? `Modelled target: <b>${impEsc(horizonLabel(tgt, hz.h))}</b>${hz.includeYt ? ` · predictor added: <b>${impEsc(horizonYtName(tgt))}</b>` : ''}`
+    ? `Modelled target: <b>${impEsc(horizonLabel(tgt, hz.h))}</b>${hz.preShifted ? ' (already shifted in the file, not shifted again)' : ''}${hz.includeYt ? ` · predictor added: <b>${impEsc(horizonYtName(tgt))}</b>${hz.preShifted ? ` (not in the file for the first ${hz.h} row(s), so those rows are left out)` : ''}` : ''}`
     : `Modelled target: <b>${impEsc(tgt)}</b> (same row, no shift)`;
   const yRow = document.getElementById('horizonYtRow');
   if (yRow) yRow.style.opacity = hz.h > 0 ? '1' : '0.5';
@@ -16157,7 +16162,7 @@ function buildMethodsSummaryText() {
   paragraphs.push(`Dataset: ${currentDatasetFileName || 'an unspecified source'}, comprising ${rawData.length} raw observations and ${features.length} predictor feature(s) (target variable: "${targetCol}"), modeled as a ${isClass ? 'binary classification' : 'regression'} task. Categorical predictors, if any, were one-hot encoded.`);
 
   if (globalState.horizon > 0) {   // v4.3
-    paragraphs.push(`Forecast design: direct ${globalState.horizon}-step-ahead forecasting. The target of each observation t is ${targetCol} at t+${globalState.horizon} (${globalState.horizon} row(s) later), and all predictors are dated t, so only information available at the forecast origin is used${globalState.includeYt ? `; the current value ${targetCol}(t) is included as a predictor` : ''}. The last ${globalState.horizon} observation(s), whose future value is not yet observed, are excluded from training and evaluation and are used only to produce forecasts beyond the sample. The naive benchmark is the ${globalState.horizon}-step random walk (forecast of ${targetCol}(t+${globalState.horizon}) = ${targetCol}(t)), which also scales the MASE${globalState.embargoAuto ? `; a gap of at least ${globalState.embargoAuto} row(s) separates the training and Test Set periods so that no training target falls inside the Test Set period` : ''}.`);
+    paragraphs.push(`Forecast design: direct ${globalState.horizon}-step-ahead forecasting. ${globalState.horizonPreShifted ? `The target column in the imported file already holds ${targetCol} at t+${globalState.horizon} for each observation t (it was shifted before import, so 4Cast Lab did not shift it again; ${targetCol}(t) for the benchmark is read ${globalState.horizon} row(s) earlier in that column)` : `The target of each observation t is ${targetCol} at t+${globalState.horizon} (${globalState.horizon} row(s) later)`}, and all predictors are dated t, so only information available at the forecast origin is used${globalState.includeYt ? `; the current value ${targetCol}(t) is included as a predictor` : ''}. The last ${globalState.horizon} observation(s), whose future value is not yet observed, are excluded from training and evaluation and are used only to produce forecasts beyond the sample. The naive benchmark is the ${globalState.horizon}-step random walk (forecast of ${targetCol}(t+${globalState.horizon}) = ${targetCol}(t)), which also scales the MASE${globalState.embargoAuto ? `; a gap of at least ${globalState.embargoAuto} row(s) separates the training and Test Set periods so that no training target falls inside the Test Set period` : ''}.`);
   }
 
   let preprocSentence = `Preprocessing: rows with a missing target value were always excluded (never imputed); remaining missing feature values were handled via ${imputeLabel}; ${outlierLabel}; features were standardized using ${scalingLabel}. Imputation parameters and outlier bounds were estimated on the training set only and applied unchanged to the Test Set.`;
@@ -40386,7 +40391,7 @@ function x491TypeChange(c, v, canType, cur) {
         pendingDerivedFeatures = Object.keys(feats).filter(k => feats[k]);
       }
       const hEl = document.getElementById('horizonH'), yEl = document.getElementById('horizonIncludeYt');
-      if (hEl) { horizonRestore = { h: parseInt(hEl.value, 10) || 0, includeYt: yEl ? yEl.checked : true }; setTimeout(() => { horizonRestore = null; }, 1500); }
+      if (hEl) { const psE = document.getElementById('horizonPreShifted'); horizonRestore = { h: parseInt(hEl.value, 10) || 0, includeYt: yEl ? yEl.checked : true, preShifted: !!(psE && psE.checked) }; setTimeout(() => { horizonRestore = null; }, 1500); }
       setTimeout(() => { if (X491.rr && Date.now() - X491.rr.at > 4000) X491.rr = null; }, 5000);
     } catch (e) { console.error('x491 snapshot', e); }
     return oO.apply(this, arguments);
@@ -58746,5 +58751,40 @@ a58CiteVersion(); window.addEventListener('load', () => setTimeout(a58CiteVersio
 })();
 </script>
 
+
+<script id="v59-preshifted">
+/* =====================================================================
+   v5.9: target already shifted in the imported file.
+   With "already shifted by h" ticked, the target column of row t already
+   holds y(t+h). It is NOT shifted again. The existing horizon pipeline
+   (row order, panel units, calendar gaps) is used only to find, for each
+   row, the row h steps ahead; inverted, that gives the row h steps
+   earlier, whose shifted target is y(t) of this row. So yOrigin (random
+   walk, MASE, y(t) predictor), liveIdx and h are exactly what a raw file
+   with the same horizon would give. The first h rows of each unit have
+   no y(t) (it is not in the file).
+   ===================================================================== */
+(function () {
+  try {
+    const o = applyHorizon;
+    applyHorizon = function (encRows, target, hz) {
+      if (!(hz && hz.h > 0 && hz.preShifted)) return o.apply(this, arguments);
+      const n = encRows.length, h = hz.h;
+      const probe = encRows.map((r, i) => { const c = Object.assign({}, r); c[target] = i; return c; });
+      const pr = o.call(this, probe, target, { h, includeYt: false });
+      const back = new Array(n).fill(-1);
+      pr.rows.forEach((r, i) => { const j = r[target]; if (j !== null && j !== undefined && Number.isInteger(Number(j))) back[Number(j)] = i; });
+      const shifted = encRows.map(r => { const v = r[target]; return (v === null || v === undefined || v === '') ? null : Number(v); });
+      const yOrigin = back.map(i => (i >= 0 ? shifted[i] : null));
+      const ytName = hz.includeYt ? horizonYtName(target) : null;
+      const rows = encRows.map((r, i) => { const c = Object.assign({}, r); if (ytName) c[ytName] = yOrigin[i]; return c; });
+      rows.forEach((r, i) => { try { Object.defineProperty(r, '__ri', { value: i, enumerable: false, configurable: true, writable: true }); } catch (e) {} });
+      const res = Object.assign({}, pr, { rows, yOrigin, liveIdx: pr.liveIdx || [], h, ytName, preShifted: true });
+      delete res.lostToGaps;
+      return res;
+    };
+  } catch (e) { console.error('v5.9 preshifted', e); }
+})();
+</script>
 </body>
 </html>
