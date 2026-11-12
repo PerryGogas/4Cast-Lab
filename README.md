@@ -1,6 +1,6 @@
 **Train - Test - Forecast - Explain**
 
-Latest version: 5.9 (November 2026)
+Latest version: 6.0 (November 2026)
 
 **4Cast Lab** is a free research and teaching laboratory for **machine learning**, **econometrics** and **causal analysis**, designed for students, instructors and researchers.
 
@@ -29,7 +29,7 @@ For any comments, suggestions, corrections: https://forms.gle/YjA7dgeqonm9qvcS7 
 
 If you use 4Cast Lab in teaching, research, or a publication, please cite it as:
 
-Gogas, P. (2026). 4Cast Lab (Version 5.9) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.22883216
+Gogas, P. (2026). 4Cast Lab (Version 6.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.22883216
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22883216.svg)](https://doi.org/10.5281/zenodo.22883216)
 
@@ -43,7 +43,7 @@ BibTeX:
   title     = {{4Cast Lab}},
   year      = {2026},
   publisher = {Zenodo},
-  version   = {5.9},
+  version   = {6.0},
   doi       = {10.5281/zenodo.22883216},
   url       = {https://doi.org/10.5281/zenodo.22883216}
 }
