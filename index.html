@@ -37764,12 +37764,30 @@ function x48RoContext() {
   const enc = encodeCategoricalsAndTarget(rawData, target);
   if (!enc.length) return { ok: false, why: 'No data.' };
   const cal = (() => { try { const c = v451RawCalendar(); return c && c.ok ? c : null; } catch (e) { return null; } })();
-  const n = enc.length;
-  const P = cal ? cal.P : enc.map((_, i) => i), U = cal ? cal.U : enc.map(() => '');
-  const map = new Map(); for (let i = 0; i < n; i++) map.set(U[i] + '\u0001' + P[i], i);
+  const n0 = enc.length;
+  const P = (cal ? cal.P : enc.map((_, i) => i)).slice(), U = (cal ? cal.U : enc.map(() => '')).slice();
+  const map = new Map(); for (let i = 0; i < n0; i++) map.set(U[i] + '\u0001' + P[i], i);
   const val = (r, f) => { const v = r[f]; return v === null || v === undefined || v === '' ? NaN : Number(v); };
-  const y = enc.map(r => val(r, target));
+  let y = enc.map(r => val(r, target));
   const feats = (st.features || []).filter(f => f !== st.ytName && enc[0] && (f in enc[0]));
+  /* v5.9 fix: "the target in my file is already shifted by h rows". The column of row t holds y(t+h),
+     so each value is moved back to its own date t+h (within the unit). The card then works on y by
+     date, as with raw data: horizon s from origin T is the target of date T+s, and y(t) is the value
+     of date t. Values whose date lies beyond the last row of a unit get a row of their own that holds
+     only the target (it is never used as a row of predictors). */
+  const preH = (!!st.horizonPreShifted && (st.horizon | 0) > 0) ? (st.horizon | 0) : 0;
+  const virt = new Set();
+  if (preH) {
+    const col = y, yd = new Array(n0).fill(NaN);
+    for (let i = 0; i < n0; i++) {
+      const key = U[i] + '\u0001' + (P[i] + preH);
+      let j = map.get(key);
+      if (j === undefined) { j = enc.length; enc.push({}); P.push(P[i] + preH); U.push(U[i]); yd.push(NaN); map.set(key, j); virt.add(j); }
+      yd[j] = col[i];
+    }
+    y = yd;
+  }
+  const n = enc.length;
   const useYt = !!st.includeYt;
   const isC = !!st.isClassification, k = mc ? st.k : (isC ? 2 : 0);
   // origins: the dates of the Test Set rows
@@ -37786,7 +37804,9 @@ function x48RoContext() {
   else if (st.showingEnsemble && ensembleResultsData && ensembleResultsData.length) models = ensembleResultsData.map(e => ({ id: e.id, label: e.label, params: e.params || {}, focus: !!e.isCurrent }));
   else models = [{ id: st.modelType, label: v41AlgoLabel(st.modelType, isC), params: st.bestParams || {}, focus: true }];
   const thr = isC && !mc ? (() => { try { return v45CurThreshold(); } catch (e) { return 0.5; } })() : 0.5;
-  return { ok: true, st, mc, run, target, enc, cal, P, U, map, y, feats, useYt, isC, k, origins, pMin, pMax, freq, m, models, thr, val, label: cal ? cal.label : (p => `row ${p + 1}`), panel: !!(cal && cal.unitCol) };
+  const baseLabel = cal ? cal.label : (p => `row ${p + 1}`);
+  const lab = p => { try { const t = baseLabel(p); return t === undefined || t === null || t === '' ? `date ${p + 1}` : t; } catch (e) { return `date ${p + 1}`; } };
+  return { ok: true, st, mc, run, target, enc, cal, P, U, map, y, feats, useYt, isC, k, origins, pMin, pMax, freq, m, models, thr, val, label: lab, panel: !!(cal && cal.unitCol), preH, virt };
 }
 
 /* ---------- the card ---------- */
@@ -37807,7 +37827,7 @@ function x48RoRender() {
   const R = X48.ro;
   if (!R.H) R.H = C.m === 12 ? 12 : 4;
   const many = C.models.length > 1;
-  body.innerHTML = `<div class="x47-explain">Every date of the Test Set period (${C.origins.length} dates, ${x48E(C.label(C.origins[0]))} to ${x48E(C.label(C.origins[C.origins.length - 1]))}) is a forecast origin. For each horizon s, a direct model (predictors at t, target at t+s) is fitted on the rows whose target is already known at the origin and forecasts s periods ahead. The hyperparameters chosen by CV in the run are kept.${C.panel ? ' Panel: every unit is forecast at each origin.' : ''}</div>
+  body.innerHTML = `${C.preH ? `<div class="x47-explain">The target column of the file is already shifted by h = ${C.preH} row(s) (box under Forecast horizon), so each value is read back to its own date: horizon s from an origin T forecasts the target of date T + s, which the file holds in the row of date T + s − ${C.preH}. With h = 1, horizon 1 is the target column of the origin row itself.</div>` : ''}<div class="x47-explain">Every date of the Test Set period (${C.origins.length} dates, ${x48E(C.label(C.origins[0]))} to ${x48E(C.label(C.origins[C.origins.length - 1]))}) is a forecast origin. For each horizon s, a direct model (predictors at t, target at t+s) is fitted on the rows whose target is already known at the origin and forecasts s periods ahead. The hyperparameters chosen by CV in the run are kept.${C.panel ? ' Panel: every unit is forecast at each origin.' : ''}</div>
     <div class="x48-ctl no-print">
       <label class="x48-inline no-print">Horizons up to <input type="number" id="x48RoH" min="1" max="24" step="1" value="${R.H}"></label>
       <label class="x48-inline no-print">Refit <select id="x48RoRefit"><option value="every"${R.refit === 'every' ? ' selected' : ''}>at every origin</option><option value="k"${R.refit === 'k' ? ' selected' : ''}>every k origins</option><option value="none"${R.refit === 'none' ? ' selected' : ''}>no refit (fitted once, at the first origin)</option></select></label>
@@ -37835,6 +37855,7 @@ function x48RoDesign(C, s) {
   // rows (unit, origin period t) with predictors at t and target y(unit, t+s)
   const rows = [];
   for (let i = 0; i < C.enc.length; i++) {
+    if (C.virt && C.virt.has(i)) continue;   // v5.9: a row that only holds a target
     const j = C.map.get(C.U[i] + '\u0001' + (C.P[i] + s));
     if (j === undefined) continue;
     const yt = C.y[j]; if (!Number.isFinite(yt)) continue;
@@ -37989,6 +38010,24 @@ function x48RoLoss(C, y, f) {
 }
 function x48RoBrier(C, y, f) { if (C.mc) return f.reduce((a, v, c) => a + (v - (y === c ? 1 : 0)) ** 2, 0); return (f - y) ** 2; }
 function x48RoClass(C, f) { return C.mc ? x48Argmax(f) : (f >= C.thr ? 1 : 0); }
+/* v5.9: AUC of the pooled binary forecasts (probability of class 1), its 95% interval from a
+   block bootstrap that resamples whole origin dates (1,000 replications, fixed seed), and the AUC
+   within the same date (only pairs of units forecast from the same origin are compared). */
+function x59RoAuc(L) {
+  const y = L.map(r => r.y), f = L.map(r => r.f);
+  const auc = calculateROCAUC(y, f);
+  const byT = new Map(); L.forEach(r => { if (!byT.has(r.T)) byT.set(r.T, []); byT.get(r.T).push(r); });
+  const dates = Array.from(byT.keys());
+  let num = 0, den = 0;
+  dates.forEach(T => { const g = byT.get(T); const yy = g.map(r => r.y), ff = g.map(r => r.f); const np = yy.filter(v => v === 1).length, nn = yy.length - np; if (np && nn) { const a = calculateROCAUC(yy, ff); if (Number.isFinite(a)) { num += a * np * nn; den += np * nn; } } });
+  const within = den ? num / den : NaN;
+  let seed = 20261112 >>> 0; const rnd = () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const bs = [];
+  if (dates.length >= 2 && Number.isFinite(auc)) for (let b = 0; b < 1000; b++) { const yy = [], ff = []; for (let d = 0; d < dates.length; d++) { const g = byT.get(dates[Math.floor(rnd() * dates.length)]); for (const r of g) { yy.push(r.y); ff.push(r.f); } } const a = calculateROCAUC(yy, ff); if (Number.isFinite(a)) bs.push(a); }
+  bs.sort((a, b) => a - b);
+  const q = p => bs.length ? bs[Math.min(bs.length - 1, Math.max(0, Math.floor(p * bs.length)))] : NaN;
+  return { auc, lo: q(0.025), hi: q(0.975), within };
+}
 function x48RoSummarise(C, res, bench, opt) {
   const H = opt.H;
   const key = r => r.T + '\u0001' + r.u;
@@ -38018,7 +38057,8 @@ function x48RoSummarise(C, res, bench, opt) {
         const brP = L.map((r, i) => C.mc ? x48RoBrier(C, r.y, Array.from({ length: C.k }, (_, c) => c === B[i].rw ? 1 : 0)) : (B[i].rw - r.y) ** 2);
         const mean = a => a.reduce((s2, x) => s2 + x, 0) / a.length;
         const dm = dieboldMariano(ll.map(Math.sqrt), llS.map(Math.sqrt), s);
-        rows.push({ s, n, acc, ll: mean(ll), brier: mean(br), accP, brierP: mean(brP), llS: mean(llS), brierS: mean(brS), dmp: dm.p, dm: dm.dm });
+        const au = C.mc ? null : x59RoAuc(L);   // v5.9: AUC for a binary target
+        rows.push({ s, n, acc, ll: mean(ll), brier: mean(br), accP, brierP: mean(brP), llS: mean(llS), brierS: mean(brS), dmp: dm.p, dm: dm.dm, auc: au ? au.auc : NaN, aucLo: au ? au.lo : NaN, aucHi: au ? au.hi : NaN, aucW: au ? au.within : NaN });
       }
     }
     out.models.push({ label: M.label, focus: M.focus, rows, by: M.by });
@@ -38040,12 +38080,12 @@ function x48RoShow() {
   const detTable = (M) => {
     let t = `<div class="table-container"><table class="metrics-table"><thead><tr><th>Horizon</th><th>Forecasts</th>`;
     if (!R.isC) t += `<th class="w44-val">RMSE</th><th>MAE</th><th>MAPE (%)</th><th>Random walk RMSE</th>${R.m ? '<th>Seasonal RW RMSE</th>' : ''}<th>Training mean RMSE</th><th>Theil's U (÷ RW)</th><th>DM p vs RW</th>`;
-    else t += `<th class="w44-val">Accuracy</th><th class="w44-val">Log loss</th><th class="w44-val">Brier</th><th>Persistence accuracy</th><th>Persistence Brier</th><th>Class shares log loss</th><th>Class shares Brier</th><th>DM p vs class shares (log loss)</th>`;
+    else t += (!R.mc ? `<th class="w44-val">AUC (95% interval)</th>${R.panel ? '<th>AUC within the same date</th>' : ''}` : '') + `<th class="w44-val">Accuracy</th><th class="w44-val">Log loss</th><th class="w44-val">Brier</th><th>Persistence accuracy</th><th>Persistence Brier</th><th>Class shares log loss</th><th>Class shares Brier</th><th>DM p vs class shares (log loss)</th>`;
     t += `</tr></thead><tbody>`;
     M.rows.forEach(r => {
-      if (!r.n) { t += `<tr><td>${r.s}</td><td>0</td><td colspan="${R.isC ? 8 : (R.m ? 8 : 7)}">no forecast (too few rows)</td></tr>`; return; }
+      if (!r.n) { t += `<tr><td>${r.s}</td><td>0</td><td colspan="${R.isC ? (8 + (!R.mc ? (R.panel ? 2 : 1) : 0)) : (R.m ? 8 : 7)}">no forecast (too few rows)</td></tr>`; return; }
       if (!R.isC) t += `<tr><td>${r.s}</td><td>${r.n}</td><td class="w44-val">${f4(r.rmse)}</td><td>${f4(r.mae)}</td><td>${Number.isFinite(r.mape) ? r.mape.toFixed(2) : 'N/A'}</td><td>${f4(r.rw)}</td>${R.m ? `<td>${f4(r.srw)}</td>` : ''}<td>${f4(r.mean)}</td><td><b>${Number.isFinite(r.theil) ? r.theil.toFixed(3) : 'N/A'}</b></td><td>${fp(r.dmp)}</td></tr>`;
-      else t += `<tr><td>${r.s}</td><td>${r.n}</td><td class="w44-val">${(100 * r.acc).toFixed(1)}%</td><td class="w44-val">${r.ll.toFixed(4)}</td><td class="w44-val">${r.brier.toFixed(4)}</td><td>${(100 * r.accP).toFixed(1)}%</td><td>${r.brierP.toFixed(4)}</td><td>${r.llS.toFixed(4)}</td><td>${r.brierS.toFixed(4)}</td><td>${fp(r.dmp)}</td></tr>`;
+      else t += `<tr><td>${r.s}</td><td>${r.n}</td>` + (!R.mc ? `<td class="w44-val">${Number.isFinite(r.auc) ? r.auc.toFixed(3) + (Number.isFinite(r.aucLo) ? ` (${r.aucLo.toFixed(2)} to ${r.aucHi.toFixed(2)})` : '') : 'N/A'}</td>${R.panel ? `<td>${Number.isFinite(r.aucW) ? r.aucW.toFixed(3) : 'N/A'}</td>` : ''}` : '') + `<td class="w44-val">${(100 * r.acc).toFixed(1)}%</td><td class="w44-val">${r.ll.toFixed(4)}</td><td class="w44-val">${r.brier.toFixed(4)}</td><td>${(100 * r.accP).toFixed(1)}%</td><td>${r.brierP.toFixed(4)}</td><td>${r.llS.toFixed(4)}</td><td>${r.brierS.toFixed(4)}</td><td>${fp(r.dmp)}</td></tr>`;
     });
     return t + `</tbody></table></div>`;
   };
@@ -38064,7 +38104,7 @@ function x48RoShow() {
     h += `<h4>${x48E(M.label)}${M.focus ? ' <span class="x47-algo-sub">model used in the other tabs</span>' : ''}</h4>` + detTable(M);
   }
   h += `<div class="x47-explain">${R.isC
-    ? 'Persistence: the class at the origin is forecast for every horizon. Class shares: the share of each class among all the targets known at the origin. Lower log loss and Brier are better. DM: Diebold-Mariano test on the per-forecast log loss against the class shares, with the Harvey-Leybourne-Newbold correction for horizon s.'
+    ? (R.mc ? '' : 'AUC: all the forecasts of the horizon pooled; 0.5 is no better than chance. The 95% interval resamples whole origin dates (block bootstrap, 1,000 replications). ' + (R.panel ? 'AUC within the same date compares only units forecast from the same origin, so it measures how well the model ranks the units, apart from what is common to a date. ' : '')) + 'Persistence: the class at the origin is forecast for every horizon. Class shares: the share of each class among all the targets known at the origin. Lower log loss and Brier are better. DM: Diebold-Mariano test on the per-forecast log loss against the class shares, with the Harvey-Leybourne-Newbold correction for horizon s.'
     : `Theil's U below 1: the model beats the random walk (the last value at the origin) at that horizon. ${R.m ? 'Seasonal random walk: the value one season (' + R.m + ' periods) before the target date. ' : ''}Training mean: the mean of the unit's values up to the origin. DM: Diebold-Mariano test against the random walk (squared errors, horizon s, Harvey-Leybourne-Newbold correction)${R.panel ? '; panel forecasts are pooled, so the p-value ignores the correlation between units at the same date' : ''}.`}</div>
     <div class="chart-container x48-chart"><canvas id="x48RoChart"></canvas></div>`;
   if (!R.mc) {
