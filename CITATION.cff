@@ -1,9 +1,9 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite it as below."
+message: "If you use this software, please cite the article in Forecasting given below."
 title: "4Cast Lab"
 abstract: "A free research and teaching laboratory for machine learning, econometrics and causal analysis. Forecasting (ML) trains, tunes and compares models honestly out of sample, explains them and tests causality (ML Granger causality, Double ML with refutation checks); Estimation (Econometrics) estimates and tests OLS, logit/probit, IV, ARIMA, ARDL, ECM, VAR/VECM and GARCH; AutoML builds a forecasting model in four steps; the Python Workbench runs Python inside the app, with a script of every run that checks each number. No coding needed; everything runs on the user's computer."
 version: "6.2"
-date-released: 2026-11-26
+date-released: 2026-11-27
 doi: 10.5281/zenodo.22883216
 authors:
   - family-names: Gogas
@@ -22,3 +22,17 @@ keywords:
   - Python
   - teaching
   - time series
+preferred-citation:
+  type: article
+  title: "4Cast Lab: Open-Source App for Machine Learning and Statistical Analysis"
+  authors:
+    - family-names: Gogas
+      given-names: Periklis
+      affiliation: "Department of Economics, Democritus University of Thrace (DUTH)"
+  journal: "Forecasting"
+  year: 2026
+  volume: 8
+  issue: 6
+  start: 115
+  doi: 10.3390/forecast8060115
+  url: "https://www.mdpi.com/2571-9394/8/6/115"

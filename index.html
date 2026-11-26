@@ -2546,8 +2546,9 @@ body.dark .x54-learn-ic.qs { background: #475569; }
           <div id="leakageHint" class="leakage-hint warn" style="display:block;"><strong>Warning:</strong> Random Sampling Split provides no protection against data leakage. If the target or any feature is computed over a rolling window (e.g. rolling Sharpe, moving average, RSI, volatility over N periods), time-adjacent observations are nearly identical and may end up split between the training set and the Test Set, artificially inflating the Test Set score (especially for KNN, decision trees, Random Forest). If this applies to your data, prefer Time-Series (Sequential Split).</div>
 
           <div id="embargoContainer" style="display:none;">
-            <label>Purge / Gap Before the Test Set (rows) <span class="info-hint" title="Removes this many rows from the end of the training period, immediately before the Test Set period starts, and from the end of the fitting part before each validation fold. When you set a forecast horizon h, 4Cast Lab shifts the target by h before the split, so each row is already a complete pair and no purge is needed (the same holds if you import a target already shifted by h). Set a purge if the target or a feature is built over a window of several periods. Called purging in López de Prado (2018) and a gap in scikit-learn.">?</span></label>
+            <label>Purge / Gap Before the Test Set (rows) <span class="info-hint" title="Rows removed from the end of the training period, just before the Test Set starts, and from the end of the fitting part before each validation fold. With a forecast horizon h, 4Cast Lab shifts the target by h before the split (or you import a target already shifted by h), so every row is a complete pair and no two rows share a target. For h of 2 or more, 4Cast Lab still removes h - 1 rows automatically: their targets are not yet known when the first forecast is made, so a model used in real time could not have been trained on them. With h = 1 nothing is removed. The number you type here is used when it is larger: set it at least equal to the window if the target or a feature is built over a window of several periods. Called purging in López de Prado (2018) and a gap in scikit-learn.">?</span></label>
             <input type="number" id="embargoRows" value="0" min="0">
+            <div id="purgeAutoNote" style="font-size:11px; color:var(--muted); margin-top:3px;"></div>
           </div>
 
           <label class="checkbox-container">
@@ -3294,8 +3295,8 @@ body.dark .x54-learn-ic.qs { background: #475569; }
             </div>
 
             <div class="about-contact" style="margin-top:10px;">
-              <div><b>How to cite.</b> Gogas, P. (2026). <i>4Cast Lab</i> (Version <span class="app-version-inline">6.1.1</span>) [Computer software]. Zenodo. <a href="https://doi.org/10.5281/zenodo.22883216" target="_blank" rel="noopener">https://doi.org/10.5281/zenodo.22883216</a></div>
-              <div style="font-size:11px; color:var(--muted);">This DOI always resolves to the latest release; each release also has its own version DOI on Zenodo.</div>
+              <div><b>How to cite.</b> Gogas, P. (2026). 4Cast Lab: Open-Source App for Machine Learning and Statistical Analysis. <i>Forecasting</i>, 8(6), 115. <a href="https://doi.org/10.3390/forecast8060115" target="_blank" rel="noopener">https://doi.org/10.3390/forecast8060115</a></div>
+              <div style="font-size:11px; color:var(--muted);">Software archive (Version <span class="app-version-inline">6.2</span>): Zenodo, <a href="https://doi.org/10.5281/zenodo.22883216" target="_blank" rel="noopener">https://doi.org/10.5281/zenodo.22883216</a>. This DOI always resolves to the latest release; each release also has its own version DOI on Zenodo.</div>
               <div style="margin-top:6px;">Known issues and reporting problems: <a href="https://github.com/PerryGogas/4Cast-Lab/issues" target="_blank" rel="noopener">github.com/PerryGogas/4Cast-Lab/issues</a></div>
             </div>
 
@@ -3899,7 +3900,8 @@ function updateSampleSizeDisplay() {
   const el = document.getElementById('sampleSizeDisplay');
   if (!el) return;
   if (globalState.X_train && globalState.X_val) {
-    el.innerText = `Training set: ${globalState.X_train.length} rows · Test Set: ${globalState.X_val.length} rows`;
+    const __pg = (globalState.splitStrategy === 'time_series' && globalState.embargoRows > 0) ? ` · purged: ${globalState.embargoRows}${(typeof v48PanelActive === 'function' && v48PanelActive()) ? ' period(s)' : ''}` : '';
+    el.innerText = `Training set: ${globalState.X_train.length} rows${__pg} · Test Set: ${globalState.X_val.length} rows`;
     el.style.display = 'block';
   } else {
     el.style.display = 'none';
@@ -8205,8 +8207,9 @@ function runPipeline() {
     const shouldStratify = document.getElementById('stratifySampling').checked;
     // y is shifted by h over the whole file before the split, so every
     // row is already a complete pair (x_t, y_t+h) and no training y is a
-    // Test Set y: no automatic purge; only the Purge setting applies
-    const embargoRows = splitStrategy === 'time_series' ? Math.max(parseInt(document.getElementById('embargoRows')?.value) || 0, 0) : 0;   // no automatic purge: y is shifted by h before the split
+    // Test Set y. v6.2: the last h - 1 training rows are still purged,
+    // because their targets are not yet known at the first forecast
+    const embargoRows = splitStrategy === 'time_series' ? purgeUsedRows(document.getElementById('embargoRows')?.value) : 0;   // v6.2: the larger of the typed purge and the automatic h - 1
     const randFunc = getRandomFunc(isDeterministic);
 
     const { trainIdx, valIdx } = computeSplitIndices(encoded.length, y, trainRatio, splitStrategy, shouldStratify, randFunc, isClassification, embargoRows, encoded);
@@ -8331,7 +8334,7 @@ function runPipeline() {
             yAll: y, timeOrdered: timeOrderInfo().ok,   // v4.2: random-walk benchmark under either split
             horizon: __hzRes.h, horizonPreShifted: !!__hzRes.preShifted, includeYt: !!__hzRes.ytName, ytName: __hzRes.ytName, yOriginFull: __hzRes.yOrigin,   // v4.3; v5.9
             yOriginTrain: trainIdx.map(i => __hzRes.yOrigin[rawRowIdx[i]]),
-            embargoAuto: 0
+            embargoAuto: (splitStrategy === 'time_series' && __hzRes.h >= 2) ? __hzRes.h - 1 : 0
           };
           globalState.v45 = __v45.info;
           globalState.v45raw = __v45Raw;
@@ -8448,8 +8451,9 @@ function runTrainAll() {
     const shouldStratify = document.getElementById('stratifySampling').checked;
     // y is shifted by h over the whole file before the split, so every
     // row is already a complete pair (x_t, y_t+h) and no training y is a
-    // Test Set y: no automatic purge; only the Purge setting applies
-    const embargoRows = splitStrategy === 'time_series' ? Math.max(parseInt(document.getElementById('embargoRows')?.value) || 0, 0) : 0;   // no automatic purge: y is shifted by h before the split
+    // Test Set y. v6.2: the last h - 1 training rows are still purged,
+    // because their targets are not yet known at the first forecast
+    const embargoRows = splitStrategy === 'time_series' ? purgeUsedRows(document.getElementById('embargoRows')?.value) : 0;   // v6.2: the larger of the typed purge and the automatic h - 1
     const randFunc = getRandomFunc(isDeterministic);
 
     const { trainIdx, valIdx } = computeSplitIndices(encoded.length, y, trainRatio, splitStrategy, shouldStratify, randFunc, isClassification, embargoRows, encoded);
@@ -8518,7 +8522,7 @@ function runTrainAll() {
       yAll: y, timeOrdered: timeOrderInfo().ok,   // v4.2
       horizon: __hzRes.h, horizonPreShifted: !!__hzRes.preShifted, includeYt: !!__hzRes.ytName, ytName: __hzRes.ytName, yOriginFull: __hzRes.yOrigin,   // v4.3; v5.9
       yOriginTrain: trainIdx.map(i => __hzRes.yOrigin[rawRowIdx[i]]),
-      embargoAuto: 0
+      embargoAuto: (splitStrategy === 'time_series' && __hzRes.h >= 2) ? __hzRes.h - 1 : 0
     };
 
     const algorithms = (typeof q68Pick === 'function' ? q68Pick : (a => a))([
@@ -9515,7 +9519,7 @@ function reproducibilityTable() {
     ['Feature scaling', { none: 'none', zscore: 'Z-score', minmax01: 'Min-Max [0,1]', minmax_neg1_1: 'Min-Max [-1,1]' }[st.scalingType] || st.scalingType],
     ['Split strategy', st.splitStrategy === 'time_series' ? 'sequential (chronological)' : 'random'],
     ['Training / Test Set', `${g('trainRatio')}% / ${100 - Number(g('trainRatio'))}%  →  ${st.X_train ? st.X_train.length : 0} / ${st.X_val ? st.X_val.length : 0} rows`],
-    ['Purge', st.splitStrategy === 'time_series' ? `${st.embargoRows || 0} row(s)` : 'not applicable'],
+    ['Purge', st.splitStrategy === 'time_series' ? `${st.embargoRows || 0} row(s)${(st.horizon >= 2 && (st.embargoRows || 0) === st.horizon - 1) ? ' (automatic, h - 1)' : ''}` : 'not applicable'],
     ['Stratified split', st.isClassification && st.splitStrategy !== 'time_series' ? g('stratifySampling') : 'not applicable'],
     ['Cross-validation', `${st.kFolds}-fold, ${CV_SCHEME_LABELS[st.cvScheme] || st.cvScheme}`],
     ['Random seed', g('deterministicSampling') === 'yes' ? 'fixed (42), reproducible' : 'not fixed, results vary between runs'],
@@ -10998,7 +11002,7 @@ function corrPreviewData() {
     const split = (document.getElementById('splitStrategy') || {}).value || 'random';
     const det = !!(document.getElementById('deterministicSampling') || {}).checked;
     const strat = !!(document.getElementById('stratifySampling') || {}).checked;
-    const emb = split === 'time_series' ? Math.max(parseInt((document.getElementById('embargoRows') || {}).value) || 0, 0) : 0;   // no automatic purge: y is shifted by h before the split
+    const emb = split === 'time_series' ? purgeUsedRows((document.getElementById('embargoRows') || {}).value) : 0;   // v6.2: the larger of the typed purge and the automatic h - 1
     const isClass = checkIsClassification(y);
     const saved = (typeof currentSeed !== 'undefined') ? currentSeed : null;
     let trainIdx = null;
@@ -11551,6 +11555,27 @@ function horizonAvailable() {
 }
 
 /* Current settings. h = 0 whenever the rows are not in time order. */
+/* v6.2: automatic purge of h - 1 rows.
+   The target is shifted by h before the split, so every row is a complete
+   pair (x_t, y_t+h) and no two rows share a target. But the last h - 1
+   training rows hold targets that are not yet known when the first Test Set
+   (or validation-fold) forecast is made: a model used in real time could not
+   have been trained on them. They are removed, so the evaluation imitates
+   real use (Hyndman and Athanasopoulos 2021, section 5.10). h = 0 and h = 1:
+   nothing is removed. The purge typed by the user is used when it is larger. */
+function purgeAutoRows(split) {
+  try {
+    if (split === undefined || split === null) split = (document.getElementById('splitStrategy') || {}).value;
+    if (split !== 'time_series') return 0;
+    const h = horizonSettings().h;
+    return h >= 2 ? h - 1 : 0;
+  } catch (e) { return 0; }
+}
+function purgeUsedRows(manual) {
+  const m = Math.max(parseInt(manual) || 0, 0);
+  return Math.max(m, purgeAutoRows('time_series'));
+}
+
 function horizonSettings() {
   const hEl = document.getElementById('horizonH');
   const yEl = document.getElementById('horizonIncludeYt');
@@ -16194,7 +16219,7 @@ function buildMethodsSummaryText() {
   const trainRatio = document.getElementById('trainRatio').value;
   const splitStrategyRaw = document.getElementById('splitStrategy').value;
   const splitStrategy = splitStrategyRaw === 'time_series' ? 'a sequential (time-series) split' : 'a random split';
-  const embargoRowsVal = splitStrategyRaw === 'time_series' ? (parseInt(document.getElementById('embargoRows')?.value) || 0) : 0;
+  const embargoRowsVal = splitStrategyRaw === 'time_series' ? (Number.isFinite(globalState.embargoRows) ? globalState.embargoRows : purgeUsedRows(document.getElementById('embargoRows')?.value)) : 0;
   const stratified = document.getElementById('stratifySampling').checked && isClass;
   const deterministic = document.getElementById('deterministicSampling').checked;
   const kFolds = document.getElementById('kFolds').value;
@@ -16247,7 +16272,7 @@ function buildMethodsSummaryText() {
   paragraphs.push(`Dataset: ${currentDatasetFileName || 'an unspecified source'}, comprising ${rawData.length} raw observations and ${features.length} predictor feature(s) (target variable: "${targetCol}"), modeled as a ${isClass ? 'binary classification' : 'regression'} task. Categorical predictors, if any, were one-hot encoded.`);
 
   if (globalState.horizon > 0) {   // v4.3
-    paragraphs.push(`Forecast design: direct ${globalState.horizon}-step-ahead forecasting. ${globalState.horizonPreShifted ? `The target column in the imported file already holds ${targetCol} at t+${globalState.horizon} for each observation t (it was shifted before import, so 4Cast Lab did not shift it again; ${targetCol}(t) for the benchmark is read ${globalState.horizon} row(s) earlier in that column)` : `The target of each observation t is ${targetCol} at t+${globalState.horizon} (${globalState.horizon} row(s) later)`}, and all predictors are dated t, so only information available at the forecast origin is used${globalState.includeYt ? `; the current value ${targetCol}(t) is included as a predictor` : ''}. The last ${globalState.horizon} observation(s), whose future value is not yet observed, are excluded from training and evaluation and are used only to produce forecasts beyond the sample. The naive benchmark is the ${globalState.horizon}-step random walk (forecast of ${targetCol}(t+${globalState.horizon}) = ${targetCol}(t)), which also scales the MASE${globalState.embargoAuto ? `; a gap of at least ${globalState.embargoAuto} row(s) separates the training and Test Set periods so that no training target falls inside the Test Set period` : ''}.`);
+    paragraphs.push(`Forecast design: direct ${globalState.horizon}-step-ahead forecasting. ${globalState.horizonPreShifted ? `The target column in the imported file already holds ${targetCol} at t+${globalState.horizon} for each observation t (it was shifted before import, so 4Cast Lab did not shift it again; ${targetCol}(t) for the benchmark is read ${globalState.horizon} row(s) earlier in that column)` : `The target of each observation t is ${targetCol} at t+${globalState.horizon} (${globalState.horizon} row(s) later)`}, and all predictors are dated t, so only information available at the forecast origin is used${globalState.includeYt ? `; the current value ${targetCol}(t) is included as a predictor` : ''}. The last ${globalState.horizon} observation(s), whose future value is not yet observed, are excluded from training and evaluation and are used only to produce forecasts beyond the sample. The naive benchmark is the ${globalState.horizon}-step random walk (forecast of ${targetCol}(t+${globalState.horizon}) = ${targetCol}(t)), which also scales the MASE${globalState.embargoAuto ? `; at least h - 1 = ${globalState.embargoAuto} row(s) were removed before the Test Set and before each validation fold, so that every model was trained only on targets already observed when its first forecast was made` : ''}.`);
   }
 
   let preprocSentence = `Preprocessing: rows with a missing target value were always excluded (never imputed); remaining missing feature values were handled via ${imputeLabel}; ${outlierLabel}; features were standardized using ${scalingLabel}. Imputation parameters and outlier bounds were estimated on the training set only and applied unchanged to the Test Set.${typeof x611MethodsText === 'function' ? x611MethodsText() : ''}`;
@@ -20406,7 +20431,9 @@ const V41_HELP = [
   { title: 'Train / Test Set split', cat: 'Evaluation', ids: ['splitStrategy'], terms: ['train / test set split', 'validation splitting logic'],
     text: '<b>Random</b> sampling suits independent observations (cross-sections). <b>Time-series</b> keeps the order: the model is trained on the past and validated on the most recent rows, as in real forecasting. Use it for any data with a time dimension.' },
   { title: 'Purge', cat: 'Evaluation', ids: ['embargoRows'], terms: ['purge', 'purging', 'gap', 'embargo'],
-    text: 'Rows removed from the end of the training data just before the Test Set, and before each validation fold, because their target falls inside the period being predicted: when the model is trained those values are not yet known. When the target is shifted by h before the split (4Cast Lab does this when you set a forecast horizon, or you import an already shifted target), no purge is needed: each row is a complete pair and no training target is a Test Set target. A purge of h rows is needed only when the pairs are formed after the split. When a target or feature is computed over a window (a 12-month growth rate, a moving average), set the purge at least equal to the window length. Called purging in López de Prado (2018) and a gap in scikit-learn; there, an embargo is a buffer after a validation fold, used in purged k-fold.' },
+    text: 'Rows removed from the end of the training data just before the Test Set, and before each validation fold, because their target falls inside the period being predicted: when the model is trained those values are not yet known. When the target is shifted by h before the split (4Cast Lab does this when you set a forecast horizon, or you import an already shifted target), each row is a complete pair and no training target is a Test Set target. 4Cast Lab then removes h - 1 rows automatically (nothing with h = 1): see "Why h - 1". A purge of h rows is needed when the pairs are formed after the split. When a target or feature is computed over a window (a 12-month growth rate, a moving average), set the purge at least equal to the window length; the larger of your number and h - 1 is used. Called purging in López de Prado (2018) and a gap in scikit-learn; there, an embargo is a buffer after a validation fold, used in purged k-fold.' },
+  { title: 'Why h - 1', cat: 'Evaluation', ids: ['embargoRows'], terms: ['why h - 1', 'automatic purge', 'h - 1'],
+    text: 'The automatic purge for a forecast horizon h of 2 or more. Example: 50 rows, h = 3, the target already shifted, so row t holds x(t) and y(t+3); rows 1 to 40 are the training set and rows 41 to 50 the Test Set. Row 41 forecasts y44 from x41, at period 41. At period 41 we know y only up to y41, so a model used in real time was trained on rows 1 to 38 (row 38 holds y41). Rows 39 and 40 hold y42 and y43, which have not happened yet at period 41: they are removed. That is 2 rows, h - 1. With h = 1 the last training row holds y41, which is known, so nothing is removed. The same rows are removed before each validation fold. It is an extra step to make the evaluation imitate real use exactly; with a lot of data it changes the results very little (Hyndman and Athanasopoulos 2021, section 5.10).' },
   { title: 'Replicable sampling', cat: 'Evaluation', ids: ['deterministicSampling'], terms: ['replicable (deterministic) sampling'],
     text: 'Fixes the random seed (42), so splits, random forests, neural networks and bootstraps give the same numbers every run. Keep it on for teaching and for any result you report.' },
   { title: 'Stratified split', cat: 'Evaluation', ids: ['stratifySampling'], terms: ['stratify sample ratios'],
@@ -21191,6 +21218,7 @@ function v41ChecklistItems(mode) {
     } else {
       add('ok', 'Time-series split', 'The model is trained on the past and validated on the most recent observations.');
       if (!st.embargoRows) add('warn', 'No purge', 'If any variable is built over a window (growth over 12 months, a moving average), set the purge at least equal to that window, or adjacent rows leak information across the split.');
+      else if (st.horizon >= 2 && st.embargoRows <= st.horizon - 1) add('ok', `Purge of ${st.embargoRows} row(s) (h - 1)`, 'The last h - 1 training rows are removed automatically, so every model is trained only on targets already known at its first forecast. If a variable is built over a longer window (growth over 12 months, a moving average), set the purge at least equal to that window.');
       else add('ok', `Purge of ${st.embargoRows} row(s)`, 'Rows next to the split are removed, so windowed variables cannot leak across it.');
       if (st.cvScheme === 'purged_kfold') add('warn', 'Purged k-fold on time series', 'Hyperparameters were chosen with folds that train on later data, which is not a forecasting evaluation. Prefer an expanding or sliding window.');
     }
@@ -24866,7 +24894,7 @@ function v45VarSelData() {
   const split = v45Val('splitStrategy', 'random');
   const det = !!(document.getElementById('deterministicSampling') || {}).checked;
   const strat = !!(document.getElementById('stratifySampling') || {}).checked;
-  const emb = split === 'time_series' ? Math.max(parseInt(v45Val('embargoRows', '0')) || 0, 0) : 0;   // no automatic purge: y is shifted by h before the split
+  const emb = split === 'time_series' ? purgeUsedRows(v45Val('embargoRows', '0')) : 0;   // v6.2: the larger of the typed purge and the automatic h - 1
   const trainIdx = v45KeepSeed(() => computeSplitIndices(enc.length, yAll, ratio, split, strat, getRandomFunc(det), isC, emb, enc).trainIdx);
   const rows = trainIdx.map(i => enc[i]);
   const X = rows.map(r => cands.map(f => { const v = r[f]; return v === null || v === undefined || v === '' ? NaN : Number(v); }));
@@ -35390,7 +35418,7 @@ function x47Sum(g) {
   if (g === 4) {
     const ts = v('splitStrategy') === 'time_series', r = parseInt(v('trainRatio'), 10) || 80, kf = parseInt(v('kFolds'), 10) || 5;
     const sch = { expanding: 'expanding', sliding: 'sliding', purged_kfold: 'purged k-fold' }[v('cvScheme')] || '';
-    return [`${ts ? 'Time series' : 'Random'} ${r}/${100 - r}`, ts ? `${sch} ${kf} folds · purge ${parseInt(v('embargoRows'), 10) || 0}` : `${kf}-fold CV · seed ${x47Det() ? X47.seed : 'new'}`];
+    return [`${ts ? 'Time series' : 'Random'} ${r}/${100 - r}`, ts ? `${sch} ${kf} folds · purge ${purgeUsedRows(v('embargoRows'))}` : `${kf}-fold CV · seed ${x47Det() ? X47.seed : 'new'}`];
   }
   if (g === 5) {
     if (est) { const e = document.getElementById('estEstimator'); return [x47Short(e && e.selectedOptions[0] ? e.selectedOptions[0].text.split(' (')[0] : 'Estimator', 28), 'full sample']; }
@@ -36808,7 +36836,7 @@ function x48Prepare(S) {
   const splitStrategy = document.getElementById('splitStrategy').value;
   const isDeterministic = document.getElementById('deterministicSampling').checked;
   const shouldStratify = document.getElementById('stratifySampling').checked;
-  const embargoRows = splitStrategy === 'time_series' ? Math.max(parseInt(document.getElementById('embargoRows')?.value) || 0, 0) : 0;   // no automatic purge: y is shifted by h before the split
+  const embargoRows = splitStrategy === 'time_series' ? purgeUsedRows(document.getElementById('embargoRows')?.value) : 0;   // v6.2: the larger of the typed purge and the automatic h - 1
   const randFunc = getRandomFunc(isDeterministic);
   const { trainIdx, valIdx } = computeSplitIndices(encoded.length, y, trainRatio, splitStrategy, shouldStratify, randFunc, true, embargoRows, encoded);
   let trainRows = trainIdx.map(i => encoded[i]), valRows = valIdx.map(i => encoded[i]);
@@ -43635,7 +43663,7 @@ function x50ReportHTML() {
   return `<!doctype html><html><head><meta charset="utf-8"><title>4Cast Lab AutoML report: ${x50Esc(R.target)}</title><style>${css}</style></head><body class="x50-report">
     <h1>4Cast Lab · AutoML report</h1><div class="x50-rsub">${x50Esc(R.data.name)} · forecasting <b>${x50Esc(R.target)}</b>${R.h > 0 ? ` ${R.h} ${x50PeriodWord(R.data.freq, R.h)} ahead` : ''} · ${x50Esc(when)} · 4Cast Lab v${typeof APP_VERSION !== 'undefined' ? APP_VERSION : ''}</div>
     ${body}${settings}
-    <div class="x50-rfoot">Generated by 4Cast Lab (E|M|E|F Lab). Gogas, P. (2026). 4Cast Lab [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.22883216</div></body></html>`;
+    <div class="x50-rfoot">Generated by 4Cast Lab (E|M|E|F Lab). Gogas, P. (2026). 4Cast Lab: Open-Source App for Machine Learning and Statistical Analysis. Forecasting, 8(6), 115. https://doi.org/10.3390/forecast8060115</div></body></html>`;
 }
 function x50PrintReport() {
   const html = x50ReportHTML(); if (!html) return;
@@ -52808,7 +52836,8 @@ function q54Readme(list, info) {
   L.push('   data are inside it, or in the .csv file of the same name next to it.');
   L.push('3. The reports (Word and HTML) are those 4Cast Lab produced from the same session.');
   L.push('', 'HOW TO CITE 4CAST LAB', '---------------------');
-  L.push(`Gogas, P. (2026). 4Cast Lab (Version ${ver}) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.22883216`);
+  L.push('Gogas, P. (2026). 4Cast Lab: Open-Source App for Machine Learning and Statistical Analysis. Forecasting, 8(6), 115. https://doi.org/10.3390/forecast8060115');
+  L.push(`Software archive (Version ${ver}): Zenodo, https://doi.org/10.5281/zenodo.22883216`);
   L.push('', 'Everything in this package was produced on this computer by 4Cast Lab; nothing was sent anywhere.');
   return L.join('\r\n') + '\r\n';
 }
@@ -61429,7 +61458,7 @@ function x611Settings() {
   const split = v45Val('splitStrategy', 'random');
   return { kFolds: Math.max(2, parseInt(v45Val('kFolds', '5')) || 5), split, scheme: getCvScheme(split),
     det: !!(document.getElementById('deterministicSampling') || {}).checked,
-    emb: split === 'time_series' ? Math.max(parseInt(v45Val('embargoRows', '0')) || 0, 0) : 0 };
+    emb: split === 'time_series' ? purgeUsedRows(v45Val('embargoRows', '0')) : 0 };
 }
 
 /* ---------- the start of a run: called by Train, Train All and the multi-class run ---------- */
@@ -63577,7 +63606,7 @@ function x62Run() {
     splitStrategy: v45Val('splitStrategy', 'random'), det: x47Det(), strat: !!(document.getElementById('stratifySampling') || {}).checked,
     compare: !!(document.getElementById('x62Compare') || {}).checked, opt: x62AnnOpt()
   };
-  S.embargoRows = S.splitStrategy === 'time_series' ? Math.max(parseInt(v45Val('embargoRows', '0')) || 0, 0) : 0;
+  S.embargoRows = S.splitStrategy === 'time_series' ? purgeUsedRows(v45Val('embargoRows', '0')) : 0;
   S.cvScheme = getCvScheme(S.splitStrategy);
   const sk = (document.getElementById('v46SelMetric') || {}).value;
   S.selKey = X62_SEL[sk] ? sk : 'auc';
@@ -64771,11 +64800,45 @@ function x62RestoreState(z) {
       ['With several outputs, every tab works: ROC and calibration of each output, bootstrap intervals, permutation importance for each output, partial dependence and ICE, SHAP for a chosen output, forecasts of the latest rows and of an uploaded file, the reports, a Python script that reproduces the network, and sessions. A card in the Model tab draws the network and its learning curve.', null, 1],
       ['<b>One name for the neural network: ANN</b> (Artificial Neural Network (ANN) where it is written out), in every list, table, report and help text.', null, 1]
     ];
+    items.push(['<b>Automatic purge of h - 1 rows for forecast horizons above 1:</b> with a time-series split and a forecast horizon h of 2 or more, 4Cast Lab now removes the last h - 1 rows before the Test Set and before each validation fold. Their targets are not yet known when the first forecast is made, so a model used in real time could not have been trained on them. With h = 1 nothing changes. For h of 2 or more, results can differ slightly from v5.9 to v6.1.1. A larger purge typed by hand is still used. See "Why h - 1" in the Glossary.', 'q59purge', 1]);
     const e = Q51_NEWS.find(x => x[0] === '6.2');
     if (e) e[2].push(...items); else Q51_NEWS.unshift(['6.2', 'November 2026', items]);
   } catch (e) { console.error('v62 news', e); }
 })();
 
+</script>
+<script>
+/* =====================================================================
+   4Cast Lab v6.2: automatic purge of h - 1 rows (the note on screen).
+   The rule itself is purgeAutoRows / purgeUsedRows, next to horizonSettings.
+   ===================================================================== */
+function purgeNoteUpdate() {
+  try {
+    const el = document.getElementById('purgeAutoNote'); if (!el) return;
+    const split = (document.getElementById('splitStrategy') || {}).value;
+    if (split !== 'time_series') { el.textContent = ''; return; }
+    const h = horizonSettings().h, auto = purgeAutoRows('time_series');
+    const manual = Math.max(parseInt((document.getElementById('embargoRows') || {}).value) || 0, 0);
+    const used = Math.max(manual, auto), rw = n => n === 1 ? 'row' : 'rows';
+    let t = '';
+    if (auto > 0) t = `Automatic purge for h = ${h}: ${auto} ${rw(auto)} (h - 1). Purge used: ${used} ${rw(used)}${manual > auto ? ' (your setting)' : ''}.`;
+    else if (h === 1) t = `Automatic purge for h = 1: none needed.${manual > 0 ? ` Purge used: ${manual} ${rw(manual)} (your setting).` : ''}`;
+    else if (manual > 0) t = `Purge used: ${manual} ${rw(manual)} (your setting).`;
+    el.textContent = t;
+  } catch (e) {}
+}
+(function () {
+  ['onHorizonChange', 'toggleEmbargoVisibility', 'horizonRefreshLabel', 'horizonApplyDefault'].forEach(fn => {
+    try {
+      if (typeof window[fn] !== 'function') return;
+      const o = window[fn];
+      window[fn] = function () { const r = o.apply(this, arguments); purgeNoteUpdate(); return r; };
+    } catch (e) {}
+  });
+  const ids = ['horizonH', 'horizonPreShifted', 'embargoRows', 'splitStrategy', 'targetSelect'];
+  ['change', 'input'].forEach(ev => document.addEventListener(ev, e => { if (e.target && ids.indexOf(e.target.id) >= 0) setTimeout(purgeNoteUpdate, 0); }));
+  setTimeout(purgeNoteUpdate, 600); setTimeout(purgeNoteUpdate, 2500);
+})();
 </script>
 </body>
 </html>

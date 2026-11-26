@@ -27,24 +27,28 @@ For any comments, suggestions, corrections: https://forms.gle/YjA7dgeqonm9qvcS7 
 
 ## How to Cite
 
-If you use 4Cast Lab in teaching, research, or a publication, please cite it as:
+If you use 4Cast Lab in teaching, research, or a publication, please cite the article:
 
-Gogas, P. (2026). 4Cast Lab (Version 6.2) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.22883216
-
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22883216.svg)](https://doi.org/10.5281/zenodo.22883216)
-
-This DOI covers all versions and always points to the latest one. Each release also has its own DOI on Zenodo.
+Gogas, P. (2026). 4Cast Lab: Open-Source App for Machine Learning and Statistical Analysis. *Forecasting*, 8(6), 115. https://doi.org/10.3390/forecast8060115
 
 BibTeX:
 
 ```bibtex
-@software{Gogas_4Cast_Lab_2026,
-  author    = {Gogas, Periklis},
-  title     = {{4Cast Lab}},
-  year      = {2026},
-  publisher = {Zenodo},
-  version   = {6.2},
-  doi       = {10.5281/zenodo.22883216},
-  url       = {https://doi.org/10.5281/zenodo.22883216}
+@article{Gogas_4Cast_Lab_2026,
+  author  = {Gogas, Periklis},
+  title   = {{4Cast Lab}: Open-Source App for Machine Learning and Statistical Analysis},
+  journal = {Forecasting},
+  year    = {2026},
+  volume  = {8},
+  number  = {6},
+  pages   = {115},
+  doi     = {10.3390/forecast8060115},
+  url     = {https://doi.org/10.3390/forecast8060115}
 }
 ```
+
+Software archive (Version 6.2): Zenodo, https://doi.org/10.5281/zenodo.22883216
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22883216.svg)](https://doi.org/10.5281/zenodo.22883216)
+
+This Zenodo DOI covers all versions and always points to the latest one. Each release also has its own DOI on Zenodo.
