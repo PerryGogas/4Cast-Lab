@@ -2392,7 +2392,7 @@ body.dark .x54-learn-ic.qs { background: #475569; }
           <option value="dt">Decision Tree</option>
           <option value="rf">Random Forest (Ensemble)</option>
           <option value="xgboost">Gradient Boosting</option>
-          <option value="ann">Artificial Neural Network (MLP)</option>
+          <option value="ann">Artificial Neural Network (ANN)</option>
           <option value="svm">SVM / SVR</option>
           <option value="logit">Logistic / Linear Regression</option>
           <option value="stacking">Stacking Ensemble</option>
@@ -8526,7 +8526,7 @@ function runTrainAll() {
       { id: 'dt', label: 'Decision Tree' },
       { id: 'rf', label: 'Random Forest' },
       { id: 'xgboost', label: 'Gradient Boosting' },
-      { id: 'ann', label: 'ANN (MLP)' },
+      { id: 'ann', label: 'ANN' },
       { id: 'svm', key: 'svm_linear', kernel: 'linear', label: (isClassification ? 'SVM' : 'SVR') + ' · linear' },   // v4.6.1
       { id: 'svm', key: 'svm_rbf', kernel: 'rbf', label: (isClassification ? 'SVM' : 'SVR') + ' · RBF' },
       { id: 'svm', key: 'svm_poly', kernel: 'poly', label: (isClassification ? 'SVM' : 'SVR') + ' · poly' },
@@ -9481,7 +9481,7 @@ function withLightCharts(fn) {
    Either can be printed alone or the two combined into one document.
    =================================================================== */
 
-const APP_VERSION = '6.1.1';
+const APP_VERSION = '6.2';
 let currentReportHTML = '';
 let currentReportTitle = '';
 
@@ -13221,7 +13221,7 @@ function renderBootModelNote() {
   }
   box.className = '';
   const algoNames = { knn: 'K-Nearest Neighbors', dt: 'Decision Tree', rf: 'Random Forest',
-    xgboost: 'Gradient Boosting', ann: 'Artificial Neural Network (MLP)',
+    xgboost: 'Gradient Boosting', ann: 'Artificial Neural Network (ANN)',
     svm: st.isClassification ? 'Support Vector Machine' : 'Support Vector Regression',
     logit: st.isClassification ? 'Logistic Regression' : 'Linear Regression', stacking: 'Stacking Ensemble' };
   const algo = algoNames[st.modelType] || st.modelType;
@@ -13839,7 +13839,7 @@ function renderOOSModelSummary() {
   box.className = '';
 
   const algoNames = { knn: 'K-Nearest Neighbors', dt: 'Decision Tree', rf: 'Random Forest',
-    xgboost: 'Gradient Boosting', ann: 'Artificial Neural Network (MLP)',
+    xgboost: 'Gradient Boosting', ann: 'Artificial Neural Network (ANN)',
     svm: st.isClassification ? 'Support Vector Machine' : 'Support Vector Regression',
     logit: st.isClassification ? 'Logistic Regression' : 'Linear Regression', stacking: 'Stacking Ensemble' };
   let algo = algoNames[st.modelType] || st.modelType;
@@ -16068,7 +16068,7 @@ function exportInferenceToXLSX() {
 function aiAlgorithmName(st) {
   const isClass = !!st.isClassification;
   const names = { knn: 'K-Nearest Neighbors', dt: 'Decision Tree', rf: 'Random Forest',
-    xgboost: 'Gradient Boosting', ann: 'Artificial Neural Network (MLP)',
+    xgboost: 'Gradient Boosting', ann: 'Artificial Neural Network (ANN)',
     svm: isClass ? 'Support Vector Machine' : 'Support Vector Regression',
     logit: isClass ? 'Logistic Regression' : 'Linear Regression',
     stacking: 'Stacking Ensemble' };
@@ -16201,7 +16201,7 @@ function buildMethodsSummaryText() {
 
   const algoNames = {
     knn: 'K-Nearest Neighbors', dt: 'a Decision Tree', rf: 'a Random Forest',
-    xgboost: 'a Gradient Boosting model', ann: 'an Artificial Neural Network (MLP)',
+    xgboost: 'a Gradient Boosting model', ann: 'an Artificial Neural Network (ANN), a multi-layer perceptron',
     svm: isClass ? 'a Support Vector Machine' : 'Support Vector Regression',
     logit: isClass ? 'Logistic Regression' : 'Linear Regression', stacking: 'a Stacking Ensemble'
   };
@@ -20387,7 +20387,7 @@ const V41_HELP = [
     text: 'An average of many trees, each grown on a bootstrap sample, with a new random subset of features considered at every split (Breiman 2001). Averaging reduces variance, so it overfits much less than a single tree. Defaults (as scikit-learn): 100 trees; all p features per split for regression, &radic;p for classification; leaves of at least 1 row. Tuned: features per split (the default or p/3) and minimum leaf size (1 or 5).' },
   { title: 'Gradient boosting', cat: 'Algorithms', terms: ['xgboost', 'gradient boosting'],
     text: 'Adds shallow trees one at a time, each fitted to the errors of the current ensemble and scaled by a learning rate (Friedman 2001). Often the most accurate on tabular data; too many trees or a high learning rate overfit. For classes the leaf values are Newton steps, as scikit-learn; with 3 or more classes one model is fitted per class (one-vs-rest) and the probabilities are normalised. Ties between equally good splits go to the first predictor, as in the decision tree.' },
-  { title: 'Neural network (MLP)', cat: 'Algorithms', ids: ['annLayers', 'annUnits', 'annActivation'], terms: ['ann', 'neural network', 'hidden layers', 'neurons per layer', 'activation function'],
+  { title: 'Artificial Neural Network (ANN)', cat: 'Algorithms', ids: ['annLayers', 'annUnits', 'annActivation'], terms: ['ann', 'neural network', 'hidden layers', 'neurons per layer', 'activation function'],
     text: 'A multi-layer perceptron trained by gradient descent. Layers and neurons set its flexibility; the activation (ReLU, sigmoid, tanh) sets the non-linearity. Needs scaled inputs and enough data; results depend on the random initialisation, so keep sampling replicable.' },
   { title: 'Support vector machine / regression', cat: 'Algorithms', ids: ['svmKernel', 'svmGamma', 'svmDegree'], terms: ['svm', 'svr', 'kernel type', 'kernel gamma', 'polynomial degree'],
     text: 'Finds the boundary (SVM) or function (SVR) with the widest margin, penalising violations by C. A kernel (RBF, polynomial) makes it non-linear; gamma sets how local the RBF kernel is. Kernel methods scale badly with the sample size.' },
@@ -21059,7 +21059,7 @@ function v41MarkSaved() { v41SetDirty(false); }
 V41.runs = [];
 V41.runSeq = 0;
 function v41AlgoLabel(id, isClass) {
-  return ({ knn: 'KNN', dt: 'Decision Tree', rf: 'Random Forest', xgboost: 'Gradient Boosting', ann: 'ANN (MLP)',
+  return ({ knn: 'KNN', dt: 'Decision Tree', rf: 'Random Forest', xgboost: 'Gradient Boosting', ann: 'ANN',
             svm: isClass ? 'SVM' : 'SVR', logit: isClass ? 'Logistic Reg' : 'Linear Reg', stacking: 'Stacking' })[id] || id;
 }
 function v41RunMetrics(isClass, yTr, yVal, rawVal, st) {
@@ -23229,7 +23229,7 @@ const V45_PROPOSED = {
   ann: { hidden: [[16], [32], [64], [32, 16], [64, 32]], lr: [0.001, 0.003, 0.01, 0.03], l2: [0, 1e-4, 1e-3, 1e-2], earlyStop: [true] },
   logit: { alpha: [0, 0.5, 1], lambdaFrac: V45_LAMBDA_PATH }
 };
-const V45_ALGO_NAMES = { knn: 'KNN', dt: 'Decision Tree', rf: 'Random Forest', xgboost: 'Gradient boosting', svm: 'SVM / SVR', ann: 'ANN (MLP)', logit: 'Linear / logistic regression' };
+const V45_ALGO_NAMES = { knn: 'KNN', dt: 'Decision Tree', rf: 'Random Forest', xgboost: 'Gradient boosting', svm: 'SVM / SVR', ann: 'ANN', logit: 'Linear / logistic regression' };
 const V45_PARAM_HELP = {
   k: 'number of neighbours', weights: 'uniform or distance (1/d) weighting', metric: 'euclidean or manhattan',
   maxDepth: 'maximum depth (none = unlimited)', minLeaf: 'minimum rows in a leaf', nEstimators: 'trees / boosting rounds (an upper bound with early stopping)',
@@ -30149,7 +30149,7 @@ const V452_VS_METHODS = [
 const V452_FILTER_HELP = 'Filters look at one predictor at a time against the target, without a model: absolute correlation |r|, mutual information (MI, which also catches non-linear links) and the univariate F-test. They are fast, but they ignore the other predictors: two near-copies of the same variable both look strong, and a variable that only helps together with others looks weak. They do not use cross-validation, so they say nothing about forecasting ability. ' +
   'All the other methods fit a model with all predictors together, so each predictor is judged given the others: LASSO and elastic net shrink weak coefficients to zero (penalty chosen by cross-validation); RFE drops the weakest predictor and refits, repeatedly; RFECV does this inside every cross-validation fold; stability selection repeats LASSO on 100 half-samples; CV permutation importance and Boruta measure how much a Random Forest (or the chosen model) relies on each predictor. ' +
   'For forecasting, the methods that use cross-validation (LASSO, elastic net, RFECV, stability selection, CV permutation importance) carry the most weight. Filters are a first look, and by default they do not count in "Selected by".';
-const V452_IMP_MODELS = [['rf', 'Random Forest'], ['xgboost', 'Gradient Boosting'], ['dt', 'Decision Tree'], ['knn', 'KNN'], ['ann', 'ANN (MLP)'], ['svm', 'SVM / SVR'], ['logit', 'Linear / logistic regression']];
+const V452_IMP_MODELS = [['rf', 'Random Forest'], ['xgboost', 'Gradient Boosting'], ['dt', 'Decision Tree'], ['knn', 'KNN'], ['ann', 'ANN'], ['svm', 'SVM / SVR'], ['logit', 'Linear / logistic regression']];
 function v452RenderVarSelControls() {
   const box = document.getElementById('v45VarSelControls'); if (!box || box.dataset.v452) return;
   box.dataset.v452 = '1'; box.dataset.ok = '1';
@@ -36757,7 +36757,7 @@ function x48Label(c) { const I = X48.info || {}; return I.labels ? I.labels[c] :
 function x48Algorithms() {
   return [
     { id: 'knn', label: 'KNN' }, { id: 'dt', label: 'Decision Tree' }, { id: 'rf', label: 'Random Forest' },
-    { id: 'xgboost', label: 'Gradient Boosting' }, { id: 'ann', label: 'ANN (MLP)' },
+    { id: 'xgboost', label: 'Gradient Boosting' }, { id: 'ann', label: 'ANN' },
     { id: 'svm', key: 'svm_linear', kernel: 'linear', label: 'SVM · linear' }, { id: 'svm', key: 'svm_rbf', kernel: 'rbf', label: 'SVM · RBF' },
     { id: 'svm', key: 'svm_poly', kernel: 'poly', label: 'SVM · poly' },
     { id: 'logit', label: 'Logistic Reg' }, { id: 'stacking', label: 'Stacking' }
@@ -45839,7 +45839,7 @@ function x53FoldSets(ctx, y) {
    package (median; the standard error from the median upper bound). */
 
 const X53_ALGOS = [
-  ['knn', null, 'KNN'], ['dt', null, 'Decision Tree'], ['rf', null, 'Random Forest'], ['xgboost', null, 'Gradient Boosting'], ['ann', null, 'ANN (MLP)'],
+  ['knn', null, 'KNN'], ['dt', null, 'Decision Tree'], ['rf', null, 'Random Forest'], ['xgboost', null, 'Gradient Boosting'], ['ann', null, 'ANN'],
   ['svm', 'linear', 'SVM · linear'], ['svm', 'rbf', 'SVM · RBF'], ['svm', 'poly', 'SVM · poly'], ['logit', null, 'Linear / logistic regression'], ['stacking', null, 'Stacking']
 ];
 const X53_Z = 1.959963984540054;
@@ -56400,7 +56400,7 @@ details.q68-pick > summary { cursor:pointer; color:var(--text); padding:2px 0; }
    same random numbers; the view only reads what the run produces.
    ===================================================================== */
 const Q68_ALL = [
-  ['knn', 'K-Nearest Neighbors'], ['dt', 'Decision Tree'], ['rf', 'Random Forest'], ['xgboost', 'Gradient Boosting'], ['ann', 'Neural Network (MLP)'],
+  ['knn', 'K-Nearest Neighbors'], ['dt', 'Decision Tree'], ['rf', 'Random Forest'], ['xgboost', 'Gradient Boosting'], ['ann', 'ANN'],
   ['svm_linear', 'SVM · linear'], ['svm_rbf', 'SVM · RBF'], ['svm_poly', 'SVM · polynomial'], ['logit', 'Logistic / Linear Regression'], ['stacking', 'Stacking Ensemble']];
 const Q68 = { on: null, run: null, tipI: 0, tipT: 0, lastR: 0, timer: null, subset: null };
 function q68Esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -61980,7 +61980,7 @@ try {
     Q51_NEWS.unshift(['6.1.1', 'November 2026', [
       ['<b>Preprocessing inside each cross-validation fold</b> (Forecasting, outside AutoML): mean or median <b>imputation</b>, the <b>outlier bounds</b> and a variable selection made with <b>Use these predictors</b> are now fitted again in every fold, on the fold\'s fitting rows only, as the scaling already was and as AutoML already did. Before, they were fitted once on all training rows.', null, 1],
       ['<b>Cross-validation scores can change</b> for runs that use one of these three steps, because the held-out rows of a fold no longer help to fill gaps, set outlier bounds or choose predictors. The change is usually small for imputation and outliers and can be large after a variable selection, where the old scores were too good. The tuned settings, and the model selected by CV in Train All, can change with them.', null, 1],
-      ['<b>What stays the same:</b> the final fit on all training rows and the Test Set evaluation. A run with Drop Incomplete Rows (or no missing value), no outlier handling and predictors ticked by hand gives exactly the results of v6.1. With Random Forest, Gradient Boosting or the Neural Network, Test Set numbers can move slightly, because the fits draw their random numbers in a different order.', null, 1],
+      ['<b>What stays the same:</b> the final fit on all training rows and the Test Set evaluation. A run with Drop Incomplete Rows (or no missing value), no outlier handling and predictors ticked by hand gives exactly the results of v6.1. With Random Forest, Gradient Boosting or the ANN, Test Set numbers can move slightly, because the fits draw their random numbers in a different order.', null, 1],
       ['<b>Where to see it:</b> the line "Inside each CV fold" in Settings of This Run, with the predictors selected in each fold; the Methods Report; the Python script of the run; Help, "Preprocessing inside the folds". A session saved before v6.1.1 that uses these steps trains again when opened.', null, 1]
     ]]);
   } catch (e) { console.error('x611 news', e); }
@@ -63097,6 +63097,1683 @@ try {
     const e = Q51_NEWS.find(x => x[0] === '6.1.1');
     if (e) e[2].push(...items); else Q51_NEWS.unshift(['6.1.1', 'November 2026', items]);
   } catch (e) { console.error('s62 news', e); }
+})();
+
+</script>
+<style id="v62-css">
+/* ===== 4Cast Lab v6.2 (layer v62): several outputs ===== */
+#x62TargetBox { margin-top: 8px; }
+.x62-tlist { max-height: 210px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; background: var(--card); }
+.x62-titem { display: flex; align-items: baseline; gap: 6px; padding: 3px 0; font-size: 12.5px; cursor: pointer; margin: 0; font-weight: normal; }
+.x62-titem input { flex: 0 0 auto; margin: 0; width: auto; }
+.x62-tname { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.x62-tpos { flex: 0 0 auto; font-size: 11px; color: var(--muted); }
+.x62-note { font-size: 11.5px; color: var(--muted); margin-top: 5px; line-height: 1.4; }
+.x62-note.x62-warn { color: var(--warn-text, #8a5a00); }
+.x62-explain { font-size: 12px; color: var(--muted); margin: 4px 0 8px; line-height: 1.45; }
+.x62-chk { display: flex; align-items: center; gap: 6px; font-size: 12.5px; margin-top: 6px; font-weight: normal; }
+.x62-chk input { width: auto; margin: 0; }
+body.x62-target-mo .x62-tsel, body.x62-target-mo .x62-hide { display: none !important; }
+#x62CutBox { display: none; }
+body.x62-target-mo #x62CutBox { display: block; }
+.x62-cut-tab { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12px; }
+.x62-cut-tab th { text-align: left; font-weight: 600; color: var(--muted); font-size: 11px; padding: 2px 4px; }
+.x62-cut-tab td { padding: 2px 4px; vertical-align: middle; }
+.x62-cut-tab td:first-child { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.x62-cut-tab input[type=number] { width: 64px; padding: 2px 4px; margin: 0; }
+.x62-cut-tab input[type=range] { width: 100%; margin: 0; }
+.x62-is-target { opacity: .5; text-decoration: line-through; }
+
+/* results */
+.x62-card { display: none; }
+body.x62-mo .x62-card { display: block; }
+body.x62-mo :is(#tabModel, #tabDiag, #tabBootstrap, #tabInterp, #tabForecast) > *:not(.x62-card):not(#v41RunHistoryCard) { display: none !important; }
+body.x62-mo #x62CmpCard[style*="display: none"] { display: none !important; }
+.x62-tab { border-collapse: collapse; font-size: 12.5px; margin: 6px 0 4px; }
+.x62-tab th, .x62-tab td { border-bottom: 1px solid var(--border); padding: 4px 8px; text-align: right; white-space: nowrap; }
+.x62-tab th:first-child, .x62-tab td:first-child { text-align: left; }
+.x62-tab thead th { color: var(--heading, var(--text)); font-weight: 600; background: var(--surface, transparent); }
+.x62-tab td.x62-cvbest { font-weight: 700; outline: 1px solid var(--accent); outline-offset: -1px; }
+.x62-avgrow td { font-weight: 600; border-top: 2px solid var(--border); }
+.x62-bench { color: var(--muted); }
+.x62-se { color: var(--muted); font-size: 11px; }
+.x62-na { color: var(--muted); font-style: italic; }
+.x62-muted { color: var(--muted); font-size: 11px; font-weight: normal; }
+.x62-tag { font-size: 10.5px; padding: 1px 6px; border-radius: 9px; background: var(--accent); color: var(--on-accent, #fff); margin-left: 4px; }
+.x62-best td { font-weight: 600; }
+.x62-kv { border-collapse: collapse; font-size: 12.5px; width: 100%; }
+.x62-kv th { text-align: left; vertical-align: top; color: var(--muted); font-weight: 600; padding: 4px 10px 4px 0; white-space: nowrap; width: 1%; }
+.x62-kv td { padding: 4px 0; border-bottom: 1px solid var(--border-soft, var(--border)); line-height: 1.4; }
+.x62-h4 { margin: 14px 0 2px; font-size: 13.5px; color: var(--heading, var(--text)); }
+.x62-det { margin: 8px 0; }
+.x62-det > summary { cursor: pointer; font-weight: 600; font-size: 12.5px; color: var(--heading, var(--text)); padding: 4px 0; }
+.x62-viewbar { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; align-items: center; }
+.x62-vbtn { width: auto; padding: 3px 10px; font-size: 12px; border: 1px solid var(--border); background: var(--card); color: var(--text); border-radius: 14px; cursor: pointer; margin: 0; }
+.x62-vbtn.on { background: var(--navy, var(--accent)); color: var(--on-navy, #fff); border-color: transparent; }
+.x62-xl { width: auto !important; margin-left: auto !important; }
+.x62-scroll { overflow-x: auto; max-width: 100%; }
+.x62-predwrap { max-height: 460px; overflow-y: auto; }
+.x62-pred thead th { position: sticky; top: 0; z-index: 1; }
+.x62-pred thead tr:nth-child(2) th { top: 27px; }
+.x62-cmgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.x62-cmbox { border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
+.x62-cmt { font-weight: 600; font-size: 12.5px; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.x62-cm { border-collapse: collapse; font-size: 12px; width: 100%; }
+.x62-cm th, .x62-cm td { border: 1px solid var(--border); padding: 4px 6px; text-align: center; }
+.x62-cm th { font-weight: 600; color: var(--muted); font-size: 11px; }
+.x62-ok { background: var(--correct-bg, rgba(44,160,44,.10)); }
+td.x62-bad, .x62-cm .x62-bad { background: rgba(214,39,40,.09); }
+.x62-warnbox { background: var(--warn-bg, #fff6e0); border: 1px solid var(--warn-border, #e8c46a); color: var(--warn-text, #6b4a00); border-radius: 6px; padding: 6px 10px; font-size: 12px; margin: 6px 0; }
+@media print { .x62-viewbar, .x62-xl { display: none !important; } .x62-predwrap { max-height: none; overflow: visible; } }
+
+.x62-det-tab thead th { white-space: normal; vertical-align: bottom; min-width: 90px; }
+.x62-det-tab thead th:first-child { min-width: 150px; }
+
+.x62-net { width: 100%; max-width: 820px; height: auto; display: block; margin: 4px auto 8px; }
+.x62-chartbox { position: relative; height: 300px; margin: 6px 0; }
+.x62-chartbox.x62-tall { height: 380px; }
+.x62-inl { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; margin: 0 8px 0 0; font-weight: normal; }
+.x62-inl select, .x62-inl input { width: auto; margin: 0; padding: 3px 6px; }
+.x62-btn { width: auto !important; margin: 0 !important; padding: 5px 12px !important; }
+.x62-ci { color: var(--muted); }
+.x62-warn { color: var(--warn-text, #8a5a00); }
+.x62-costbox { width: 52px !important; padding: 2px 4px !important; margin: 0 !important; }
+
+</style>
+<script id="v62-layer">
+/* =====================================================================
+   4Cast Lab v6.2, stage 1 (layer v62), Perry 26 Nov 2026:
+   "Create a release where we have a multi-output artificial neural network."
+   Task type "Classification, several outputs (0/1 each)": 2 to 10 target
+   columns, one ANN with one sigmoid output node per target column.
+   Stage 1: target ticks, the network, cross-validation and tuning, a cutoff
+   per output, Model tab results and the comparison with separate models.
+   ===================================================================== */
+const X62 = { lastOn: false, cost: {}, replay: null, charts: {}, bootB: 1000, calOut: 0, pdpOut: 0, pdpFeat: 0, shapOut: 0, targets: [], candRef: null, cand: [], run: null, cut: {}, rule: 'manual', busy: false, view: 'avg', predSet: 'test', algPrev: null, guard: false };
+const X62_MAX = 10;
+const X62_RULES = { manual: 'Manual (the boxes)', half: '0.5 for every output', youden: "Maximum Youden's J, each output", f1: 'Maximum F1, each output', cost: 'Minimum expected cost, each output' };
+const X62_SEL = { auc: ['AUC', 1], logloss: ['log loss', -1], brier: ['Brier score', -1], f1: ['F1', 1], bal: ['balanced accuracy', 1], acc: ['accuracy', 1] };
+
+/* ---------- v6.2: ANN with several 0/1 outputs (one sigmoid node per target column) ----------
+   Loss: binary cross-entropy of each output, summed over the outputs; the error of an output
+   whose target is missing in a row is 0 (masked loss). Class weights per output (cw[j] = [w0, w1]).
+   Same options and conventions as the two-class ANN (v45FitAnn): rows visited in order, plain SGD,
+   L2 decay, delta clipped to [-5, 5], He-type uniform start, early stopping on the last 10% of rows. */
+function x62FitAnn(X, Y, p, randFunc, cw, opt) {
+  randFunc = randFunc || Math.random;
+  opt = opt || {};
+  const m = Y[0].length;
+  const hidden = Array.isArray(p.hidden) ? p.hidden : (opt.hidden || [8]);
+  const actType = opt.act || 'relu';
+  const lr = p.lr || 0.01, l2 = p.l2 || 0;
+  const n0 = X.length;
+  let nFit = n0, hold = [];
+  if (p.earlyStop && n0 >= 30) { nFit = n0 - Math.max(5, Math.round(0.1 * n0)); hold = Array.from({ length: n0 - nFit }, (_, i) => nFit + i); }
+  const maxEpochs = p.earlyStop ? 200 : (opt.epochs || 40);
+  const dims = [X[0].length].concat(hidden, [m]);
+  const W = [], B = [];
+  for (let l = 0; l < dims.length - 1; l++) {
+    const lim = Math.sqrt(2.0 / dims[l]);
+    W.push(Array.from({ length: dims[l + 1] }, () => Array.from({ length: dims[l] }, () => (randFunc() * 2 - 1) * lim)));
+    B.push(new Array(dims[l + 1]).fill(0));
+  }
+  const sig = v => 1 / (1 + Math.exp(-Math.max(-50, Math.min(50, v))));
+  const act = v => actType === 'sigmoid' ? sig(v) : actType === 'tanh' ? Math.tanh(v) : Math.max(0, v);
+  const dact = (z, a) => actType === 'sigmoid' ? a * (1 - a) : actType === 'tanh' ? 1 - a * a : (z > 0 ? 1 : 0);
+  const clip = v => Math.max(-5, Math.min(5, v));
+  const L = W.length - 1;
+  const forward = (x) => {
+    const A = [x], Z = [];
+    for (let l = 0; l < W.length; l++) {
+      const prev = A[l], z = new Array(W[l].length), a = new Array(W[l].length);
+      for (let r = 0; r < W[l].length; r++) {
+        let s = B[l][r]; const wr = W[l][r];
+        for (let c = 0; c < wr.length; c++) s += wr[c] * prev[c];
+        z[r] = s; a[r] = l === L ? sig(s) : act(s);
+      }
+      Z.push(z); A.push(a);
+    }
+    return { A, Z };
+  };
+  const has = v => v === 0 || v === 1;
+  const holdLoss = () => {
+    let s = 0;
+    for (const i of hold) {
+      const o = forward(X[i]).A[W.length];
+      for (let j = 0; j < m; j++) { const y = Y[i][j]; if (!has(y)) continue; s -= y * Math.log(Math.max(o[j], 1e-15)) + (1 - y) * Math.log(Math.max(1 - o[j], 1e-15)); }
+    }
+    return s / Math.max(1, hold.length);
+  };
+  const snap = () => ({ W: W.map(mm => mm.map(r => r.slice())), B: B.map(b => b.slice()) });
+  let best = Infinity, bestState = null, since = 0, epochsRun = 0;
+  const curve = [], curveOut = Array.from({ length: m }, () => []), curveHold = [];
+  for (let ep = 0; ep < maxEpochs; ep++) {
+    epochsRun++;
+    let trLoss = 0;
+    const trOut = new Array(m).fill(0), trN = new Array(m).fill(0);
+    for (let i = 0; i < nFit; i++) {
+      const { A, Z } = forward(X[i]);
+      const out = A[W.length];
+      const deltas = new Array(W.length);
+      const d = new Array(m);
+      for (let j = 0; j < m; j++) {
+        const y = Y[i][j];
+        if (!has(y)) { d[j] = 0; continue; }
+        const w = cw && cw[j] ? cw[j][y] : 1;
+        d[j] = clip(w * (out[j] - y));
+        if (opt.curve) { const ll = -(y * Math.log(Math.max(out[j], 1e-15)) + (1 - y) * Math.log(Math.max(1 - out[j], 1e-15))); trLoss += ll; trOut[j] += ll; trN[j]++; }
+      }
+      deltas[L] = d;
+      for (let l = L - 1; l >= 0; l--) {
+        const dl = new Array(W[l].length);
+        for (let r = 0; r < W[l].length; r++) {
+          let e = 0; for (let q = 0; q < W[l + 1].length; q++) e += W[l + 1][q][r] * deltas[l + 1][q];
+          dl[r] = clip(e * dact(Z[l][r], A[l + 1][r]));
+        }
+        deltas[l] = dl;
+      }
+      for (let l = 0; l < W.length; l++) {
+        const prev = A[l];
+        for (let r = 0; r < W[l].length; r++) {
+          const wr = W[l][r], dr = deltas[l][r];
+          for (let c = 0; c < wr.length; c++) wr[c] -= lr * (dr * prev[c] + l2 * wr[c]);
+          B[l][r] -= lr * dr;
+        }
+      }
+    }
+    if (opt.curve) { curve.push(trLoss / Math.max(1, nFit)); for (let j = 0; j < m; j++) curveOut[j].push(trOut[j] / Math.max(1, trN[j])); }
+    if (hold.length) {
+      const hl = holdLoss();
+      if (opt.curve) curveHold.push(hl);
+      if (!Number.isFinite(hl)) break;
+      if (hl < best - 1e-12) { best = hl; bestState = snap(); since = 0; } else if (++since >= 10) break;
+    }
+  }
+  if (bestState) { for (let l = 0; l < W.length; l++) { W[l] = bestState.W[l]; B[l] = bestState.B[l]; } }
+  return {
+    m, dims,
+    proba: Xt => Xt.map(r => { const o = forward(r).A[W.length]; return Float64Array.from(o, v => Number.isFinite(v) ? v : 0.5); }),
+    info: { epochs: epochsRun, curve, curveOut, curveHold, nHold: hold.length },
+    weights: () => ({ W: W.map(mm => mm.map(r => r.slice())), B: B.map(b => b.slice()), act: actType })
+  };
+}
+
+/* balanced class weights of each output, from the rows where it is present (as class_weight='balanced') */
+function x62ClassWeights(Y) {
+  const m = Y[0].length, cw = [];
+  for (let j = 0; j < m; j++) {
+    let n0 = 0, n1 = 0;
+    for (const r of Y) { if (r[j] === 1) n1++; else if (r[j] === 0) n0++; }
+    const n = n0 + n1;
+    cw.push(n0 && n1 ? [n / (2 * n0), n / (2 * n1)] : [1, 1]);
+  }
+  return cw;
+}
+
+function x62E(s) { try { return v41Esc(String(s === null || s === undefined ? '' : s)); } catch (e) { return String(s); } }
+function x62On() {
+  try {
+    if (typeof appMode !== 'undefined' && appMode === 'estimation') return false;
+    return (document.getElementById('taskTypeSelect') || {}).value === 'multi';
+  } catch (e) { return false; }
+}
+function x62Miss(v) { return v === null || v === undefined || v === '' || (typeof v === 'number' && !Number.isFinite(v)); }
+function x62IsTarget(f, T) { T = T || X62.targets; return T.some(t => f === t || String(f).indexOf(t + '_') === 0); }
+
+/* ---------- the columns that can be targets: exactly two values ---------- */
+function x62Candidates() {
+  if (typeof rawData === 'undefined' || !rawData || !rawData.length) return [];
+  if (X62.candRef === rawData) return X62.cand;
+  const out = [];
+  Object.keys(rawData[0]).forEach(k => {
+    if (k === '__ri') return;
+    const vals = rawData.map(r => r[k]);
+    const lab = sortedUniqueLabels(vals.filter(v => !x62Miss(v)));
+    if (lab.length !== 2) return;
+    let meta = false; try { meta = isMetaVariable(k, vals); } catch (e) {}
+    if (meta) return;
+    const s = lab.map(String);
+    const pos = s.includes('1') && s.includes('0') ? '1' : s[1];
+    const neg = s[0] === pos ? s[1] : s[0];
+    const nMiss = vals.filter(x62Miss).length;
+    out.push({ name: k, pos, neg, nMiss });
+  });
+  X62.candRef = rawData; X62.cand = out;
+  return out;
+}
+function x62Pos(t) { const c = x62Candidates().find(c => c.name === t); return c ? c.pos : '1'; }
+function x62Code(t, v, pos) { if (x62Miss(v)) return null; return String(v) === String(pos) ? 1 : 0; }
+
+/* ---------- left panel: the option, the ticks, the comparison tick, the cutoffs ---------- */
+function x62InstallUI() {
+  const ts = document.getElementById('taskTypeSelect');
+  if (ts && !ts.querySelector('option[value="multi"]')) {
+    const o = document.createElement('option'); o.value = 'multi'; o.textContent = 'Classification, several outputs (0/1 each)';
+    ts.appendChild(o);
+    const hint = ts.previousElementSibling && ts.previousElementSibling.querySelector('.info-hint');
+    if (hint) hint.title += ' Classification, several outputs: tick 2 to 10 target columns with two values each (for example 0/1 red flags). One ANN predicts all of them at once, with one output node and one probability per target column; a row can be 1 in several of them.';
+  }
+  if (ts && !document.getElementById('x62TargetBox')) {
+    ts.insertAdjacentHTML('afterend', `<div id="x62TargetBox" style="display:none;">
+      <label class="field-label">Target columns (tick 2 to ${X62_MAX})<span class="info-hint" title="Columns with exactly two values. Each ticked column becomes one output node of the ANN, with its own probability (0 to 1) and its own cutoff. The probabilities do not sum to 1: a row can be 1 in several outputs. A missing value in a target column is allowed: that output adds no error for that row. The ticked columns are never used as predictors.">?</span></label>
+      <div id="x62TargetList" class="x62-tlist"></div>
+      <div id="x62TargetNote" class="x62-note"></div>
+    </div>`);
+  }
+  const tsel = document.getElementById('targetSelect');
+  if (tsel) { tsel.classList.add('x62-tsel'); const l = tsel.previousElementSibling; if (l && l.tagName === 'LABEL') l.classList.add('x62-tsel'); }
+  const pcc = document.getElementById('positiveClassContainer'); if (pcc) pcc.classList.add('x62-tsel');
+  const alg = document.getElementById('algorithmSelect');
+  if (alg && !document.getElementById('x62CmpBox')) {
+    alg.insertAdjacentHTML('afterend', `<div id="x62CmpBox" style="display:none;">
+      <div class="x62-note">With several outputs the model is the <b>ANN</b> (one network, one output node per target column).</div>
+      <label class="x62-chk"><input type="checkbox" id="x62Compare" checked> Compare with separate models<span class="info-hint" title="For every output the app also trains a separate ANN (same settings and loss, one output node) and a Logistic Regression, on the same folds and the same Test Set, so you can see whether the shared network does better than one model per output. It takes longer.">?</span></label>
+    </div>`);
+  }
+  const card = document.getElementById('thresholdCard');
+  if (card && !document.getElementById('x62CutBox')) {
+    ['x47CutNote', 'probThreshold', 'q50ThrNote', 'thrRule', 'optThresholdOutput'].forEach(id => { const e = document.getElementById(id); if (e) e.classList.add('x62-hide'); });
+    card.querySelectorAll('label.q50-thrrow, label[for="thrRule"]').forEach(e => e.classList.add('x62-hide'));
+    card.insertAdjacentHTML('beforeend', `<div id="x62CutBox">
+      <div class="x62-explain">Each output has its own cutoff: a row is predicted 1 in an output when its probability is at or above that output's cutoff. AUC, log loss and Brier score do not depend on the cutoffs.</div>
+      <label class="field-label" for="x62Rule">Threshold rule<span class="info-hint" title="Manual: the boxes below. The other rules choose each output's cutoff on its out-of-fold predictions inside the TRAINING partition (the cross-validation of the chosen setting), then apply it to the Training and Test Set columns. Minimum expected cost uses the two costs above for every output.">?</span></label>
+      <select id="x62Rule" onchange="x62OnRule()">${Object.entries(X62_RULES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
+      <div id="x62CutTable"></div>
+    </div>`);
+  }
+}
+
+function x62RenderTicks() {
+  const box = document.getElementById('x62TargetList'); if (!box) return;
+  const C = x62Candidates();
+  X62.targets = X62.targets.filter(t => C.some(c => c.name === t));
+  if (!C.length) { box.innerHTML = '<div class="x62-note">No column with exactly two values in this dataset.</div>'; x62Note(); return; }
+  box.innerHTML = C.map(c => `<label class="x62-titem" title="${x62E(c.name)}: 1 = ${x62E(c.pos)}, 0 = ${x62E(c.neg)}${c.nMiss ? `, ${c.nMiss} missing` : ''}"><input type="checkbox" class="x62-tcb" value="${x62E(c.name)}"${X62.targets.includes(c.name) ? ' checked' : ''} onchange="x62OnTick(this)"><span class="x62-tname">${x62E(c.name)}</span><span class="x62-tpos">1 = ${x62E(c.pos)}${c.nMiss ? ` · ${c.nMiss} missing` : ''}</span></label>`).join('');
+  x62Note();
+}
+function x62Note(msg) {
+  const n = document.getElementById('x62TargetNote'); if (!n) return;
+  const m = X62.targets.length;
+  n.innerHTML = msg || (m < 2 ? `Tick at least 2 target columns (${m} ticked).` : `<b>${m} outputs</b>: ${X62.targets.map(x62E).join(', ')}. They are left out of the predictors.`);
+  n.classList.toggle('x62-warn', !!msg || m < 2);
+}
+function x62OnTick(cb) {
+  const C = x62Candidates();
+  let T = Array.from(document.querySelectorAll('#x62TargetList .x62-tcb:checked')).map(e => e.value);
+  let msg = '';
+  if (T.length > X62_MAX) { cb.checked = false; T = T.filter(t => t !== cb.value); msg = `At most ${X62_MAX} target columns.`; }
+  X62.targets = C.map(c => c.name).filter(n => T.includes(n));   // column order
+  x62SyncTargetSelect();
+  x62Note(msg || undefined);
+  x62RenderCutTable();
+  try { scheduleDropRebuild(); } catch (e) {}
+  x62AfterChange();
+}
+/* the app's own target selector follows the first ticked column, so every other part of the app has a target */
+function x62SyncTargetSelect() {
+  const sel = document.getElementById('targetSelect'); if (!sel || !X62.targets.length) return;
+  if (sel.value === X62.targets[0]) { x62MarkChecklist(); return; }
+  if (!Array.from(sel.options).some(o => o.value === X62.targets[0])) return;
+  sel.value = X62.targets[0];
+  X62.guard = true;
+  try { onTargetChange(); } finally { X62.guard = false; }
+  x62MarkChecklist();
+}
+function x62MarkChecklist() {
+  const on = x62On();
+  document.querySelectorAll('#featureChecklist .feature-checkbox').forEach(cb => {
+    const lab = cb.closest('label') || cb.parentElement;
+    if (on && x62IsTarget(cb.value)) {
+      if (!cb.dataset.x62) { cb.dataset.x62 = cb.checked ? '1' : '0'; }
+      cb.checked = false; cb.disabled = true;
+      if (lab) { lab.classList.add('x62-is-target'); lab.title = 'A target column: never a predictor.'; }
+    } else if (cb.dataset.x62) {
+      cb.disabled = false; delete cb.dataset.x62;
+      if (lab) { lab.classList.remove('x62-is-target'); lab.title = ''; }
+    }
+  });
+}
+function x62AfterChange() {
+  try { x47Chip(); } catch (e) {}
+  try { if (typeof x47RefreshSums === 'function') x47RefreshSums(); } catch (e) {}
+  try { if (typeof x47UpdateSums === 'function') x47UpdateSums(); } catch (e) {}
+}
+
+/* the mode switches on and off */
+function x62Sync() {
+  const on = x62On();
+  const box = document.getElementById('x62TargetBox'); if (box) box.style.display = on ? '' : 'none';
+  const cmp = document.getElementById('x62CmpBox'); if (cmp) cmp.style.display = on ? '' : 'none';
+  document.body.classList.toggle('x62-target-mo', on);
+  if (on !== X62.lastOn) { X62.lastOn = on; try { scheduleDropRebuild(); } catch (e) {} }
+  const alg = document.getElementById('algorithmSelect');
+  if (alg) {
+    if (on) {
+      if (X62.algPrev === null) X62.algPrev = alg.value;
+      Array.from(alg.options).forEach(o => { o.disabled = o.value !== 'ann'; });
+      if (alg.value !== 'ann') { alg.value = 'ann'; try { onAlgorithmChange(); } catch (e) {} }
+    } else if (X62.algPrev !== null) {
+      Array.from(alg.options).forEach(o => { o.disabled = false; });
+      const p = X62.algPrev; X62.algPrev = null;
+      if (alg.value !== p) { alg.value = p; try { onAlgorithmChange(); } catch (e) {} }
+    }
+  }
+  if (on) { x62RenderTicks(); x62SyncTargetSelect(); x62RenderCutTable(); }
+  else { x62MarkChecklist(); if (X62.run) x62Clear(); }
+  x62AfterChange();
+}
+
+/* ---------- cutoffs ---------- */
+function x62Cut(t) { const v = X62.cut[t]; return Number.isFinite(v) ? v : 0.5; }
+function x62RenderCutTable() {
+  const box = document.getElementById('x62CutTable'); if (!box) return;
+  const T = X62.run ? X62.run.T : X62.targets;
+  if (!T.length) { box.innerHTML = ''; return; }
+  const manual = X62.rule === 'manual', cost = X62.rule === 'cost';
+  box.innerHTML = `<table class="x62-cut-tab" data-v41done="1"><thead><tr><th>Output</th><th>Cutoff</th>${cost ? '<th title="Cost of a false positive">C FP</th><th title="Cost of a false negative">C FN</th>' : '<th></th>'}</tr></thead><tbody>${T.map((t, j) => {
+    const v = x62Cut(t), c = x62CostOf(t);
+    return `<tr><td title="${x62E(t)}">${x62E(t)}</td><td><input type="number" class="x62-cutbox" data-j="${j}" min="0" max="1" step="0.01" value="${v.toFixed(2)}"${manual ? '' : ' disabled'} onchange="x62OnCut(this)" aria-label="Cutoff of ${x62E(t)}"></td>${cost
+      ? `<td><input type="number" class="x62-costbox" data-j="${j}" data-k="fp" min="0" step="any" value="${c.fp}" onchange="x62OnCost(this)" aria-label="False positive cost of ${x62E(t)}"></td><td><input type="number" class="x62-costbox" data-j="${j}" data-k="fn" min="0" step="any" value="${c.fn}" onchange="x62OnCost(this)" aria-label="False negative cost of ${x62E(t)}"></td>`
+      : `<td><input type="range" class="x62-cutrange" data-j="${j}" min="0" max="1" step="0.01" value="${v}"${manual ? '' : ' disabled'} oninput="x62OnCutDrag(this)" onchange="x62OnCut(this)" aria-label="Cutoff slider of ${x62E(t)}"></td>`}</tr>`;
+  }).join('')}</tbody></table>${cost ? '<div class="x62-note">Costs of each output (default: the two costs above). Only their ratio matters for the cutoff.</div>' : ''}<div id="x62RuleNote" class="x62-note">${X62.run && X62.run.ruleNote ? X62.run.ruleNote : ''}</div>`;
+}
+function x62OnCutDrag(el) {
+  const j = +el.dataset.j, T = X62.run ? X62.run.T : X62.targets;
+  const b = document.querySelector(`.x62-cutbox[data-j="${j}"]`); if (b) b.value = (+el.value).toFixed(2);
+  X62.cut[T[j]] = +el.value;
+}
+function x62OnCut(el) {
+  const j = +el.dataset.j, T = X62.run ? X62.run.T : X62.targets;
+  let v = parseFloat(el.value); if (!Number.isFinite(v)) v = 0.5; v = Math.max(0, Math.min(1, v));
+  X62.cut[T[j]] = v;
+  const b = document.querySelector(`.x62-cutbox[data-j="${j}"]`), r = document.querySelector(`.x62-cutrange[data-j="${j}"]`);
+  if (b) b.value = v.toFixed(2); if (r) r.value = v;
+  if (X62.run) x62RenderResults(false);
+}
+function x62OnRule() {
+  X62.rule = (document.getElementById('x62Rule') || {}).value || 'manual';
+  if (X62.run) x62ApplyRule(X62.run);
+  x62RenderCutTable();
+  if (X62.run) x62RenderResults(false);
+  x62AfterChange();
+}
+/* the rule's cutoff of each output, from its out-of-fold predictions inside the training partition */
+function x62ApplyRule(run) {
+  const rule = X62.rule;
+  run.ruleNote = '';
+  if (rule === 'manual') return;
+  run.T.forEach((t, j) => {
+    const cc = x62CostOf(t), cFP = cc.fp, cFN = cc.fn;
+    if (rule === 'half') { X62.cut[t] = 0.5; return; }
+    const y = [], p = [];
+    run.oof.forEach((P, i) => { const v = run.YtrAll[i][j]; if (P && (v === 0 || v === 1)) { y.push(v); p.push(P[j]); } });
+    if (y.length < 2 || new Set(y).size < 2) { X62.cut[t] = 0.5; return; }
+    const cand = Array.from(new Set(p)).sort((a, b) => a - b);
+    let best = 0.5, bestV = -Infinity;
+    cand.forEach(th => {
+      let tp = 0, fp = 0, tn = 0, fn = 0;
+      for (let i = 0; i < y.length; i++) { const pr = p[i] >= th ? 1 : 0; if (pr && y[i]) tp++; else if (pr) fp++; else if (y[i]) fn++; else tn++; }
+      let v;
+      if (rule === 'youden') v = tp / Math.max(1, tp + fn) + tn / Math.max(1, tn + fp) - 1;
+      else if (rule === 'f1') v = tp ? 2 * tp / (2 * tp + fp + fn) : 0;
+      else v = -(cFP * fp + cFN * fn) / y.length;
+      if (v > bestV + 1e-12) { bestV = v; best = th; }
+    });
+    X62.cut[t] = best;
+  });
+  run.ruleNote = `Cutoffs chosen by the rule "${X62_RULES[rule]}" on the out-of-fold predictions of the training partition.`;
+}
+function x62CostOf(t) {
+  let fp = 1, fn = 1; try { const k = v45Costs(); fp = k.cFP; fn = k.cFN; } catch (e) {}
+  const c = X62.cost[t] || {};
+  return { fp: Number.isFinite(c.fp) ? c.fp : fp, fn: Number.isFinite(c.fn) ? c.fn : fn };
+}
+function x62OnCost(el) {
+  const T = X62.run ? X62.run.T : X62.targets, t = T[+el.dataset.j]; if (!t) return;
+  let v = parseFloat(el.value); if (!Number.isFinite(v) || v < 0) v = 1;
+  X62.cost[t] = Object.assign({}, X62.cost[t] || {}, { [el.dataset.k]: v });
+  if (X62.run) { x62ApplyRule(X62.run); x62RenderCutTable(); x62RenderResults(false); }
+}
+
+/* ---------- preprocessing fitted on the fitting rows only (fold-specific in cross-validation) ---------- */
+function x62Prep(fitRows, applyRows, S) {
+  const F0 = fitRows.map((r, i) => { const o = { __x62i: i }; S.features.forEach(f => { const v = r[f]; o[f] = x62Miss(v) ? null : Number(v); }); return o; });
+  const A0 = applyRows.map((r, i) => { const o = { __x62i: i }; S.features.forEach(f => { const v = r[f]; o[f] = x62Miss(v) ? null : Number(v); }); return o; });
+  let F = F0, A = A0, imp = null, bnd = null;
+  if (S.imputeType !== 'drop') { imp = fitImputationParams(F, S.imputeType, '__x62i'); F = applyImputation(F, imp); A = applyImputation(A, imp); }
+  if (S.outlierType !== 'none') { bnd = fitOutlierBounds(F, '__x62i', S.outlierType); F = applyOutlierBounds(F, bnd, true); A = applyOutlierBounds(A, bnd, false); }
+  const num = o => S.features.map(f => { const v = Number(o[f]); return Number.isFinite(v) ? v : 0; });
+  const Xf0 = F.map(num), Xa0 = A.map(num);
+  const sc = applyScaling(Xf0, Xa0, S.scalingType);
+  return { Xf: sc.scaledTrain, Xa: sc.scaledVal, keep: F.map(o => o.__x62i), imp, bnd, sc };
+}
+function x62AnnOpt() {
+  const L = parseInt(v45Val('annLayers', '1')) || 1, U = parseInt(v45Val('annUnits', '8')) || 8;
+  return { hidden: Array.from({ length: L }, () => U), act: v45Val('annActivation', 'relu') };
+}
+function x62WithImb(imb, fn) { const s = V45.imb; V45.imb = imb; try { return fn(); } finally { V45.imb = s; } }
+
+/* ---------- the run ---------- */
+function x62Run() {
+  hideValidationBanner();
+  if (typeof rawData === 'undefined' || !rawData || !rawData.length) { showValidationBanner('Load a dataset first.'); return; }
+  const T = X62.targets.slice();
+  if (T.length < 2) { showValidationBanner('Tick at least 2 target columns in 2 Target (Classification, several outputs).'); return; }
+  try { v45BeginRun(); } catch (e) {}
+  try {
+    if (X62.replay && X62.replay.seed) X47.runSeed = X62.replay.seed.det ? null : X62.replay.seed.runSeed;   // a session's stored run: its own seed
+    else X47.runSeed = x47Det() ? null : 1 + Math.floor(Math.random() * 999999);
+    if (!x47Det()) X47.lastRunSeed = X47.runSeed;
+  } catch (e) {}
+  try { if (typeof X611 !== 'undefined') X611.ctx = null; } catch (e) {}   // v6.1.1 fold steps belong to the single-target runs
+  const feats = Array.from(document.querySelectorAll('.feature-checkbox:checked')).map(cb => cb.value).filter(f => !isMetaVariable(f, []) && !x62IsTarget(f, T));
+  if (!feats.length) { showValidationBanner('Tick at least one predictor in 3 Features.'); return; }
+  const pos = {}; T.forEach(t => { pos[t] = x62Pos(t); });
+  const imb0 = (V45.run && V45.run.imb) || 'none';
+  const S = {
+    T, pos, features: feats, t0: Date.now(), imb0, useW: imb0 === 'weights',
+    imputeType: v45Val('imputeType', 'mean'), outlierType: v45Val('outlierType', 'none'), scalingType: v45Val('scalingType', 'zscore'),
+    trainRatio: parseFloat(v45Val('trainRatio', '80')) / 100, kFolds: parseInt(v45Val('kFolds', '5')) || 5, hpMode: getHpMode(),
+    splitStrategy: v45Val('splitStrategy', 'random'), det: x47Det(), strat: !!(document.getElementById('stratifySampling') || {}).checked,
+    compare: !!(document.getElementById('x62Compare') || {}).checked, opt: x62AnnOpt()
+  };
+  S.embargoRows = S.splitStrategy === 'time_series' ? Math.max(parseInt(v45Val('embargoRows', '0')) || 0, 0) : 0;
+  S.cvScheme = getCvScheme(S.splitStrategy);
+  const sk = (document.getElementById('v46SelMetric') || {}).value;
+  S.selKey = X62_SEL[sk] ? sk : 'auc';
+  try { clearPreviousOutputs(); } catch (e) {}
+  try { if (typeof X48 !== 'undefined' && X48.lastRun) x48Clear(); document.body.classList.remove('x48-mc'); } catch (e) {}
+  X62.busy = true;
+  showProgress('Model Training Pipeline', 'Preprocessing data (several outputs)...', 10);
+  setTimeout(() => {
+    try { x62Prepare(S); }
+    catch (e) { X62.busy = false; console.error('v62 prepare', e); hideProgress(); showValidationBanner('Training failed: ' + (e && e.message ? e.message : e)); }
+  }, 30);
+}
+function x62Prepare(S) {
+  const T = S.T;
+  // the target columns are coded 0/1 (missing stays missing) and kept out of the encoding of the predictors
+  const rows0 = rawData.map((r, i) => { const o = Object.assign({}, r); o.__ri = i; T.forEach(t => { delete o[t]; }); return o; });
+  let enc = encodeCategoricalsAndTarget(rows0, '__x62none__');
+  if (enc.length !== rawData.length) throw new Error('the rows changed while the predictors were encoded');
+  enc.forEach((o, i) => { const r = rawData[i]; T.forEach(t => { o[t] = x62Code(t, r[t], S.pos[t]); }); });
+  // the forecast horizon: every target column is shifted in the same way
+  const hz = horizonSettings(); S.h = hz.h;
+  if (hz.h > 0) {
+    const cols = T.map(t => applyHorizon(enc, t, { h: hz.h, includeYt: false, preShifted: hz.preShifted }).rows.map(r => r[t]));
+    enc = enc.map((r, i) => { const o = Object.assign({}, r); T.forEach((t, j) => { o[t] = cols[j][i] === null || cols[j][i] === undefined ? null : cols[j][i]; }); return o; });
+  }
+  const n0 = enc.length;
+  S.dropAll = 0; S.dropInc = 0;
+  S.liveRows = hz.h > 0 ? enc.filter(r => T.every(t => r[t] !== 0 && r[t] !== 1)) : [];
+  enc = enc.filter(r => { if (T.every(t => r[t] !== 0 && r[t] !== 1)) { S.dropAll++; return false; } return true; });
+  S.features = S.features.filter(f => enc.length && f in enc[0]);
+  if (!S.features.length) throw new Error('none of the ticked predictors is in the data');
+  if (S.imputeType === 'drop') enc = enc.filter(r => { const ok = S.features.every(f => !x62Miss(r[f]) && Number.isFinite(Number(r[f]))); if (!ok) S.dropInc++; return ok; });
+  S.n0 = n0; S.n = enc.length;
+  if (S.n < 10) throw new Error(`only ${S.n} usable rows`);
+  const nFlags = r => T.reduce((s, t) => s + (r[t] === 1 ? 1 : 0), 0);
+  const ystrat = enc.map(r => Math.min(2, nFlags(r)));
+  S.randFunc = getRandomFunc(S.det);
+  const sp = computeSplitIndices(enc.length, ystrat, S.trainRatio, S.splitStrategy, S.strat, S.randFunc, true, S.embargoRows, enc);
+  S.trainIdx = sp.trainIdx; S.valIdx = sp.valIdx;
+  S.trRows = sp.trainIdx.map(i => enc[i]); S.teRows = sp.valIdx.map(i => enc[i]);
+  const perr = checkPartitionSizes(S.trRows.length, S.teRows.length, S.embargoRows, S.splitStrategy, enc.length);
+  if (perr) { X62.busy = false; hideProgress(); showValidationBanner(perr); return; }
+  S.YtrAll = S.trRows.map(r => T.map(t => r[t])); S.Yte = S.teRows.map(r => T.map(t => r[t]));
+  S.ystratTr = S.trRows.map(r => Math.min(2, nFlags(r)));
+  const one = T.filter((t, j) => new Set(S.YtrAll.map(y => y[j]).filter(v => v === 0 || v === 1)).size < 2);
+  if (one.length) { X62.busy = false; hideProgress(); showValidationBanner(`In the training set ${one.map(x62E).join(', ')} ${one.length > 1 ? 'have' : 'has'} only one value: nothing to learn for ${one.length > 1 ? 'these outputs' : 'this output'}. Untick ${one.length > 1 ? 'them' : 'it'}, or use more data.`); return; }
+  // panel data: the periods of the training rows, for the time-series folds
+  try { if (typeof v48PanelActive === 'function' && v48PanelActive()) { const per0 = v48PeriodOfRaw(); V48.periodsByN.set(S.trRows.length, S.trRows.map(r => per0[r.__ri])); } } catch (e) {}
+  x62Tune(S);
+}
+function x62Fold(S, params, st, models) {
+  const f = st.folds[st.i++]; if (!f || !f.valIdx.length || f.trainIdx.length < 2) return;
+  const fr = f.trainIdx.map(i => S.trRows[i]), vr = f.valIdx.map(i => S.trRows[i]);
+  const pr = x62Prep(fr, vr, S);
+  const Yf = pr.keep.map(k => S.YtrAll[f.trainIdx[k]]);
+  const out = { idx: f.valIdx.slice() };
+  if (models.shared) {
+    const cw = S.useW ? x62ClassWeights(Yf) : null;
+    out.P = x62FitAnn(pr.Xf, Yf, params, st.rnd, cw, S.opt).proba(pr.Xa);
+  }
+  if (models.sep) {
+    out.Psep = S.T.map((t, j) => {
+      const rows = []; Yf.forEach((y, i) => { if (y[j] === 0 || y[j] === 1) rows.push(i); });
+      const Yj = rows.map(i => [Yf[i][j]]);
+      if (new Set(Yj.map(v => v[0])).size < 2) return pr.Xa.map(() => NaN);
+      const cw = S.useW ? x62ClassWeights(Yj) : null;
+      return x62FitAnn(rows.map(i => pr.Xf[i]), Yj, params, st.rnd, cw, S.opt).proba(pr.Xa).map(p => p[0]);
+    });
+    out.Plog = S.T.map((t, j) => {
+      const rows = []; Yf.forEach((y, i) => { if (y[j] === 0 || y[j] === 1) rows.push(i); });
+      const yj = rows.map(i => Yf[i][j]);
+      if (new Set(yj).size < 2) return pr.Xa.map(() => NaN);
+      return x62WithImb(S.useW ? 'weights' : 'none', () => fitModel('logit', rows.map(i => pr.Xf[i]), yj, S.logitParams, true, st.rnd).predict(pr.Xa));
+    });
+  }
+  st.out.push(out);
+}
+/* the score of one setting: the metric for selection, averaged over the outputs in each fold, then over the folds */
+function x62Score(S, outs, key) {
+  const per = outs.map(o => {
+    const v = S.T.map((t, j) => {
+      const y = [], p = [];
+      o.idx.forEach((i, r) => { const yy = S.YtrAll[i][j]; if (yy === 0 || yy === 1) { y.push(yy); p.push(o.P[r][j]); } });
+      if (!y.length) return NaN;
+      return v46FoldMetrics(y, p, true, 0.5)[key];
+    }).filter(Number.isFinite);
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN;
+  }).filter(Number.isFinite);
+  const mean = per.length ? per.reduce((a, b) => a + b, 0) / per.length : NaN;
+  const sd = per.length > 1 ? Math.sqrt(per.reduce((a, b) => a + (b - mean) * (b - mean), 0) / (per.length - 1)) : NaN;
+  return { mean, se: sd / Math.sqrt(per.length), nFolds: per.length, score: X62_SEL[key][1] * mean };
+}
+function x62Tune(S) {
+  let grid = getGridSpace('ann', S.hpMode);
+  if (!Array.isArray(grid) || !grid.length) grid = [{}];
+  S.grid = grid;
+  try { const g = getGridSpace('logit', 'default'); S.logitParams = (Array.isArray(g) && g[0]) || {}; } catch (e) { S.logitParams = {}; }
+  const res = grid.map(params => ({ params, outs: null, cv: null }));
+  const tasks = [];
+  S.sig = x62Sig(S);
+  const RP = X62.replay && X62.replay.sig === S.sig && X62.replay.gridCv && X62.replay.gridCv.length === grid.length ? X62.replay : null;
+  S.replayUsed = !!RP; S.replayFailed = !!X62.replay && !RP;
+  X62.replay = null;
+  const label = gi => () => grid.length > 1 ? `ANN, several outputs: setting ${gi + 1} of ${grid.length}` : 'ANN, several outputs: cross-validation of the default setting';
+  grid.forEach((params, gi) => {
+    let st = null;
+    if (RP && gi !== RP.bestIdx) { res[gi].cv = RP.gridCv[gi]; res[gi].outs = []; return; }   // stored tuning: only the chosen setting's folds are fitted again
+    tasks.push({ w: 0, label: label(gi), run: () => { const rnd = getRandomFunc(S.det); st = { rnd, folds: buildCvFolds(S.trRows.length, S.ystratTr, S.kFolds, true, S.splitStrategy, S.embargoRows, S.cvScheme, rnd), i: 0, out: [] }; } });
+    for (let f = 0; f < S.kFolds; f++) tasks.push({ w: 1, label: label(gi), run: () => { if (st && st.i < st.folds.length) x62Fold(S, params, st, { shared: true }); } });
+    tasks.push({ w: 0, label: label(gi), run: () => { while (st.i < st.folds.length) x62Fold(S, params, st, { shared: true }); res[gi].outs = st.out; res[gi].cv = x62Score(S, st.out, S.selKey); } });
+  });
+  let best = null;
+  tasks.push({ w: 0, label: () => 'choosing the setting', run: () => {
+    if (RP) best = res[RP.bestIdx];
+    else res.forEach(r => { if (r.cv && Number.isFinite(r.cv.score) && (!best || r.cv.score > best.cv.score)) best = r; });
+    if (!best) best = res[0];
+    S.best = best; S.gridCv = res.map(r => r.cv);
+  } });
+  // the comparison: a separate ANN and a Logistic Regression per output, on the same folds
+  let stc = null;
+  if (S.compare) {
+    const m = S.T.length;
+    tasks.push({ w: 0, label: () => 'separate models per output: cross-validation', run: () => { const rnd = getRandomFunc(S.det); stc = { rnd, folds: buildCvFolds(S.trRows.length, S.ystratTr, S.kFolds, true, S.splitStrategy, S.embargoRows, S.cvScheme, rnd), i: 0, out: [] }; } });
+    for (let f = 0; f < S.kFolds; f++) tasks.push({ w: m, label: () => 'separate models per output: cross-validation', run: () => { if (stc && stc.i < stc.folds.length) x62Fold(S, S.best.params, stc, { sep: true }); } });
+    tasks.push({ w: 0, label: () => 'separate models per output', run: () => { while (stc.i < stc.folds.length) x62Fold(S, S.best.params, stc, { sep: true }); S.cmpOuts = stc.out; } });
+  }
+  tasks.push({ w: 1.5, label: () => 'fitting the chosen setting on the training set', run: () => {
+    if (RP && Number.isFinite(RP.seedBefore)) currentSeed = RP.seedBefore;
+    S.seedBefore = currentSeed; S.bestIdx = res.indexOf(S.best);
+    x62FinalFit(S);
+  } });
+  if (S.compare) tasks.push({ w: S.T.length, label: () => 'separate models per output: final fits', run: () => x62FinalFitSep(S) });
+  const pr = v45Progress(tasks.reduce((a, t) => a + t.w, 0));
+  try { v41JobStart('grid'); } catch (e) {}
+  v45RunTasks(tasks, {
+    progress: pr,
+    onStatus: (lbl, frac, eta) => showProgress('Cross-Validation', `${lbl}${eta}`, 15 + Math.round(80 * frac)),
+    onError: (err) => { X62.busy = false; try { v41JobEnd(false); } catch (e) {} hideProgress(); console.error(err); showValidationBanner('Training failed: ' + (err && err.message ? err.message : err)); },
+    onCancel: () => { X62.busy = false; }
+  }, () => {
+    try { x62Finish(S); } catch (err) { console.error('v62 finish', err); showValidationBanner('Training failed: ' + (err && err.message ? err.message : err)); }
+    X62.busy = false;
+    hideProgress(); try { v41JobEnd(false); } catch (e) {}
+  });
+}
+function x62FinalFit(S) {
+  const pr = x62Prep(S.trRows, S.teRows, S);
+  S.fitKeep = pr.keep;
+  S.Ytr = pr.keep.map(k => S.YtrAll[k]);
+  const cw = S.useW ? x62ClassWeights(S.Ytr) : null;
+  S.cw = cw;
+  const mdl = x62FitAnn(pr.Xf, S.Ytr, S.best.params, S.randFunc, cw, Object.assign({ curve: true }, S.opt));
+  S.model = mdl; S.PTr = mdl.proba(pr.Xf); S.PTe = mdl.proba(pr.Xa); S.Xf = pr.Xf; S.Xa = pr.Xa;
+  S.epochs = mdl.info.epochs; S.dims = mdl.dims; S.sc = pr.sc; S.imp = pr.imp; S.bnd = pr.bnd; S.curve = mdl.info;
+  // forecasts of the latest rows, whose targets lie beyond the data (horizon h)
+  try { S.live = S.liveRows && S.liveRows.length ? x62Apply(S.liveRows, S) : null; } catch (e) { console.error('v62 live', e); S.live = null; }
+}
+function x62FinalFitSep(S) {
+  const rnd = S.randFunc;
+  S.sepTe = S.T.map((t, j) => {
+    const rows = []; S.Ytr.forEach((y, i) => { if (y[j] === 0 || y[j] === 1) rows.push(i); });
+    const Yj = rows.map(i => [S.Ytr[i][j]]);
+    const cw = S.useW ? x62ClassWeights(Yj) : null;
+    return x62FitAnn(rows.map(i => S.Xf[i]), Yj, S.best.params, rnd, cw, S.opt).proba(S.Xa).map(p => p[0]);
+  });
+  S.logTe = S.T.map((t, j) => {
+    const rows = []; S.Ytr.forEach((y, i) => { if (y[j] === 0 || y[j] === 1) rows.push(i); });
+    const yj = rows.map(i => S.Ytr[i][j]);
+    return x62WithImb(S.useW ? 'weights' : 'none', () => fitModel('logit', rows.map(i => S.Xf[i]), yj, S.logitParams, true, rnd).predict(S.Xa));
+  });
+}
+function x62Finish(S) {
+  // out-of-fold predictions of the chosen setting, for the CV columns and the threshold rules
+  const oof = new Array(S.trRows.length).fill(null);
+  S.best.outs.forEach(o => o.idx.forEach((i, r) => { oof[i] = o.P[r]; }));
+  const run = X62.run = {
+    T: S.T, pos: S.pos, features: S.features, S, oof, YtrAll: S.YtrAll, folds: S.best.outs, time: new Date(),
+    share: S.T.map((t, j) => { const v = S.Ytr.map(y => y[j]).filter(x => x === 0 || x === 1); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; })
+  };
+  x62ApplyRule(run);
+  run.boot = null; run.imp = null; run.shap = null; run.fc = null;
+  globalState = { x62mo: true, isClassification: true, features: S.features.slice(), targetName: S.T[0], showingEnsemble: false, modelType: 'ann' };
+  document.body.classList.add('x62-mo');
+  x62InstallCards();
+  x62RenderCutTable();
+  x62RenderResults(true);
+  try { x62RecordRun(run); } catch (e) { console.error('v62 history', e); }
+  try { if (S.replayUsed) showValidationBanner('Session opened: the results of its last run are back (stored tuning, the chosen setting refitted).', 'success'); else if (S.replayFailed) showValidationBanner('Session opened. The stored tuning did not match the data or settings, so the last training was run again: results are back.', 'success'); } catch (e) {}
+  try { v41MarkRun('forecast', 'single'); } catch (e) {}
+  try { v41SetDirty(true); } catch (e) {}
+  try { v41UpdateEmptyTabs(); } catch (e) {}
+  try { if (typeof showTab === 'function') showTab('tabModel'); } catch (e) {}
+  showProgress('Complete', 'Model trained successfully!', 100);
+}
+
+/* ---------- metrics ---------- */
+const X62_MROWS = [['auc', 'AUC', 3, 1], ['acc', 'Accuracy', 'pct', 1], ['bal', 'Balanced accuracy', 3, 1], ['sens', 'Sensitivity', 3, 1], ['spec', 'Specificity', 3, 1],
+  ['prec', 'Precision', 3, 1], ['f1', 'F1', 3, 1], ['mcc', 'MCC', 3, 1], ['prauc', 'PR-AUC', 3, 1], ['logloss', 'Log loss', 4, -1], ['brier', 'Brier score', 4, -1]];
+function x62M(y, p, thr) {
+  const k = []; y.forEach((v, i) => { if ((v === 0 || v === 1) && Number.isFinite(p[i])) k.push(i); });
+  if (!k.length) return null;
+  const yy = k.map(i => y[i]), pp = k.map(i => p[i]);
+  const m = v46FoldMetrics(yy, pp, true, thr);
+  if (new Set(yy).size < 2) { m.auc = NaN; m.prauc = NaN; m.mcc = NaN; }
+  m.n = yy.length; m.n1 = yy.filter(v => v === 1).length;
+  return m;
+}
+function x62Col(Y, P, j) { return { y: Y.map(r => r[j]), p: P.map(r => r ? r[j] : NaN) }; }
+/* the whole set of answers: exact match, Hamming loss, and "at least one flag" */
+function x62SetM(Y, P, cuts) {
+  let nAll = 0, exact = 0, wrong = 0, present = 0;
+  const ya = [], pa = [], da = [];
+  Y.forEach((y, i) => {
+    const p = P[i]; if (!p) return;
+    let allP = true, allRight = true, anyY = 0, anyD = 0, prodNo = 1;
+    y.forEach((v, j) => {
+      if (v !== 0 && v !== 1) { allP = false; return; }
+      const d = p[j] >= cuts[j] ? 1 : 0;
+      present++; if (d !== v) { wrong++; allRight = false; }
+    });
+    if (!allP) return;
+    nAll++; if (allRight) exact++;
+    y.forEach((v, j) => { if (v === 1) anyY = 1; if (p[j] >= cuts[j]) anyD = 1; prodNo *= (1 - p[j]); });
+    ya.push(anyY); pa.push(1 - prodNo); da.push(anyD);
+  });
+  const r = { nAll, exact: nAll ? exact / nAll : NaN, hamming: present ? wrong / present : NaN };
+  if (ya.length) {
+    const cm = calculateConfusionMatrix(ya, da), cmm = computeClassMetrics(cm);
+    r.anyAcc = cmm.acc; r.anySens = cmm.sens; r.anySpec = cmm.spec;
+    r.anyAuc = new Set(ya).size === 2 ? calculateROCAUC(ya, pa) : NaN;
+    r.anyShare = ya.reduce((a, b) => a + b, 0) / ya.length;
+  }
+  return r;
+}
+function x62MeanSe(a) {
+  const v = a.filter(Number.isFinite); if (!v.length) return { mean: NaN, se: NaN, n: 0 };
+  const m = v.reduce((s, x) => s + x, 0) / v.length;
+  const sd = v.length > 1 ? Math.sqrt(v.reduce((s, x) => s + (x - m) * (x - m), 0) / (v.length - 1)) : NaN;
+  return { mean: m, se: sd / Math.sqrt(v.length), n: v.length };
+}
+function x62Compute(run) {
+  const S = run.S, T = run.T, m = T.length, cuts = T.map(x62Cut);
+  const C = { cuts, out: [], avg: {}, set: {} };
+  for (let j = 0; j < m; j++) {
+    const o = { cv: {}, tr: null, te: null };
+    const foldM = run.folds.map(f => { const y = f.idx.map(i => S.YtrAll[i][j]), p = f.P.map(r => r[j]); return x62M(y, p, cuts[j]); });
+    X62_MROWS.forEach(([k]) => { o.cv[k] = x62MeanSe(foldM.map(fm => fm ? fm[k] : NaN)); });
+    o.foldM = foldM;
+    const tr = x62Col(S.Ytr, S.PTr, j), te = x62Col(S.Yte, S.PTe, j);
+    o.tr = x62M(tr.y, tr.p, cuts[j]); o.te = x62M(te.y, te.p, cuts[j]);
+    // benchmarks on the Test Set: the share of 1s in the training set, and the majority class
+    const sh = run.share[j];
+    o.bShare = x62M(te.y, te.y.map(() => sh), cuts[j]);
+    o.bMaj = x62M(te.y, te.y.map(() => sh >= 0.5 ? 1 : 0), cuts[j]);
+    if (o.bShare) { o.bShare.auc = 0.5; }
+    if (o.bMaj) { o.bMaj.auc = 0.5; }
+    C.out.push(o);
+  }
+  const avgOf = (fn) => { const v = C.out.map(fn).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
+  X62_MROWS.forEach(([k]) => {
+    const perFold = run.folds.map((f, fi) => avgOf(o => o.foldM[fi] ? o.foldM[fi][k] : NaN));
+    C.avg[k] = { cv: x62MeanSe(perFold), tr: avgOf(o => o.tr ? o.tr[k] : NaN), te: avgOf(o => o.te ? o.te[k] : NaN),
+      bShare: avgOf(o => o.bShare ? o.bShare[k] : NaN), bMaj: avgOf(o => o.bMaj ? o.bMaj[k] : NaN) };
+  });
+  const setFold = run.folds.map(f => x62SetM(f.idx.map(i => S.YtrAll[i]), f.P, cuts));
+  C.set = { cv: {}, tr: x62SetM(S.Ytr, S.PTr, cuts), te: x62SetM(S.Yte, S.PTe, cuts) };
+  ['exact', 'hamming', 'anyAcc', 'anySens', 'anySpec', 'anyAuc'].forEach(k => { C.set.cv[k] = x62MeanSe(setFold.map(s => s[k])); });
+  // the comparison
+  if (S.compare && S.cmpOuts && S.sepTe) {
+    C.cmp = T.map((t, j) => {
+      const ys = (o) => o.idx.map(i => S.YtrAll[i][j]);
+      const cvOf = (pick) => x62MeanSe(S.cmpOuts.map(o => { const r = x62M(ys(o), pick(o), cuts[j]); return r ? r.auc : NaN; }));
+      const llOf = (pick) => x62MeanSe(S.cmpOuts.map(o => { const r = x62M(ys(o), pick(o), cuts[j]); return r ? r.logloss : NaN; }));
+      const te = x62Col(S.Yte, S.PTe, j).y;
+      const mS = x62M(te, S.PTe.map(r => r[j]), cuts[j]), mA = x62M(te, S.sepTe[j], cuts[j]), mL = x62M(te, S.logTe[j], cuts[j]);
+      return {
+        cvAuc: [C.out[j].cv.auc, cvOf(o => o.Psep[j]), cvOf(o => o.Plog[j])],
+        cvLl: [C.out[j].cv.logloss, llOf(o => o.Psep[j]), llOf(o => o.Plog[j])],
+        teAuc: [mS && mS.auc, mA && mA.auc, mL && mL.auc], teLl: [mS && mS.logloss, mA && mA.logloss, mL && mL.logloss]
+      };
+    });
+  }
+  return C;
+}
+
+/* ---------- cards ---------- */
+const X62_CARDS = [['x62SetCard', 'Settings of This Run'], ['x62NetCard', 'The Network and Its Learning Curve'], ['x62MetricsCard', 'Model Performance Metrics'], ['x62CmpCard', 'Shared Network against Separate Models'],
+  ['x62CmCard', 'Confusion Matrices (Test Set)'], ['x62PredCard', 'Predictions Output Table']];
+const X62_TAB_CARDS = {
+  tabDiag: [['x62RocCard', 'ROC Curves of Each Output (Test Set)'], ['x62CalCard', 'Calibration of Each Output (Test Set)']],
+  tabBootstrap: [['x62BootCard', 'Bootstrap Confidence Intervals (Test Set resampled, model fixed)']],
+  tabInterp: [['x62ImpCard', 'Permutation Importance'], ['x62PdpCard', 'Partial Dependence and ICE'], ['x62ShapCard', 'SHAP Values for One Output']],
+  tabForecast: [['x62FcCard', 'Forecasts of Each Output']]
+};
+const X62_NOTE_TABS = [];
+function x62InstallCards() {
+  const panel = document.getElementById('tabModel'); if (!panel) return;
+  let prev = null;
+  X62_CARDS.forEach(([id, title]) => {
+    let c = document.getElementById(id);
+    if (!c) { c = document.createElement('div'); c.className = 'card x62-card'; c.id = id; c.innerHTML = `<h3>${title}</h3><div class="x62-body" id="${id}Body"></div>`; }
+    if (prev) prev.insertAdjacentElement('afterend', c); else panel.insertBefore(c, panel.firstChild);
+    prev = c;
+  });
+  const hist = document.getElementById('v41RunHistoryCard');
+  if (hist && hist.parentElement === panel) { const cmp = document.getElementById('x62CmpCard'); if (cmp) cmp.insertAdjacentElement('afterend', hist); }
+  Object.entries(X62_TAB_CARDS).forEach(([tab, list]) => {
+    const p = document.getElementById(tab); if (!p) return;
+    let pv = null;
+    list.forEach(([id, title]) => {
+      let c = document.getElementById(id);
+      if (!c) { c = document.createElement('div'); c.className = 'card x62-card'; c.id = id; c.innerHTML = `<h3>${title}</h3><div class="x62-body" id="${id}Body"></div>`; }
+      if (pv) pv.insertAdjacentElement('afterend', c); else p.insertBefore(c, p.firstChild);
+      pv = c;
+    });
+  });
+  X62_NOTE_TABS.forEach(tab => {
+    const p = document.getElementById(tab); if (!p || document.getElementById('x62Note_' + tab)) return;
+    const c = document.createElement('div'); c.className = 'card x62-card'; c.id = 'x62Note_' + tab;
+    c.innerHTML = `<h3>Several outputs</h3><div class="x62-explain">For a run with several outputs this tab comes in the next build of v6.2 (stage 2): ROC and calibration of each output, bootstrap intervals, permutation importance, partial dependence and SHAP for a chosen output, forecasts for an uploaded file, and the reports and Python script. The results of this run are in the <b>Model</b> tab.</div>`;
+    p.insertBefore(c, p.firstChild);
+  });
+}
+function x62Clear() {
+  X62.run = null;
+  Object.values(X62.charts).forEach(c => { try { c.destroy(); } catch (e) {} }); X62.charts = {};
+  document.body.classList.remove('x62-mo');
+  document.querySelectorAll('.x62-card .x62-body').forEach(b => { b.innerHTML = ''; });
+  if (globalState && globalState.x62mo) globalState = {};
+  x62RenderCutTable();
+}
+function x62F(v, d) {
+  if (v === null || v === undefined || !Number.isFinite(v)) return '<span class="x62-na">n/a</span>';
+  if (d === 'pct') return (100 * v).toFixed(1) + '%';
+  try { if (typeof v45FmtNum === 'function') {} } catch (e) {}
+  return v.toFixed(d);
+}
+function x62FSe(o, d) {
+  if (!o || !Number.isFinite(o.mean)) return '<span class="x62-na">n/a</span>';
+  const se = Number.isFinite(o.se) ? ` <span class="x62-se">± ${d === 'pct' ? (100 * o.se).toFixed(1) + '%' : o.se.toFixed(d)}</span>` : '';
+  return x62F(o.mean, d) + se;
+}
+function x62RenderResults(first) {
+  const run = X62.run; if (!run) return;
+  const C = run.C = x62Compute(run);
+  x62RenderSettings(run, C);
+  x62RenderMetrics(run, C);
+  x62RenderCmp(run, C);
+  x62RenderCm(run, C);
+  x62RenderPred(run, C);
+  const safe = (f, n) => { try { f(run, C); } catch (e) { console.error('v62 ' + n, e); } };
+  safe(x62RenderNet, 'net'); safe(x62RenderRoc, 'roc'); safe(x62RenderCal, 'cal'); safe(x62RenderBootSetup, 'boot'); safe(x62RenderImpSetup, 'imp');
+  safe(x62RenderPdpSetup, 'pdp'); safe(x62RenderShapSetup, 'shap'); safe(x62RenderFc, 'fc');
+}
+function x62ParamText(p) {
+  if (!p || !Object.keys(p).length) return 'built-in defaults';
+  const nm = { lr: 'learning rate', l2: 'L2 penalty', hidden: 'hidden layers', earlyStop: 'early stopping' };
+  return Object.entries(p).map(([k, v]) => `${nm[k] || k} ${Array.isArray(v) ? v.join(' × ') : (typeof v === 'boolean' ? (v ? 'on' : 'off') : v)}`).join(', ');
+}
+function x62RenderSettings(run, C) {
+  const b = document.getElementById('x62SetCardBody'); if (!b) return;
+  const S = run.S, T = run.T;
+  const imbTxt = S.useW ? 'class weights for each output (balanced)' : (S.imb0 && S.imb0 !== 'none' ? `none (${x62E(S.imb0)} is not available with several outputs: the rows are shared by all the outputs; choose Class weights)` : 'none');
+  const split = S.splitStrategy === 'time_series' ? `time-series split, ${Math.round(S.trainRatio * 100)}/${Math.round(100 - S.trainRatio * 100)}${S.embargoRows ? `, purge ${S.embargoRows} rows` : ''}` : `random split, ${Math.round(S.trainRatio * 100)}/${Math.round(100 - S.trainRatio * 100)}${S.strat ? ', stratified by the number of 1s of each row (0, 1, 2 or more)' : ''}`;
+  const seed = (() => { try { return x47SeedUsed(); } catch (e) { return ''; } })();
+  const dims = S.dims || [];
+  const sel = X62_SEL[S.selKey];
+  const tune = S.grid.length > 1 ? `<table class="x62-tab"><thead><tr><th>Setting</th><th>CV ${sel[0]}, average over the outputs</th></tr></thead><tbody>${S.grid.map((p, i) => {
+      const r = S.best && S.best.params === p; const cv = (r ? S.best : null) || null;
+      return `<tr class="${r ? 'x62-best' : ''}"><td>${x62E(x62ParamText(p))}${r ? ' <span class="x62-tag">chosen</span>' : ''}</td><td>${x62FSe(x62Grid(S, i), sel[1] > 0 ? 3 : 4)}</td></tr>`;
+    }).join('')}</tbody></table>` : '';
+  b.innerHTML = `<div class="x62-viewbar no-print"><button type="button" class="btn-chart-dl x62-xl" onclick="v45ExportPython()" title="A Python script (numpy, pandas, scikit-learn) with the modelling rows, the preprocessing and the weights of this network: it reproduces the app's predictions and refits scikit-learn's MLPClassifier for comparison">Export Python script (.py)</button></div><table class="x62-kv"><tbody>
+    <tr><th>Task</th><td>Classification, several outputs: <b>${T.length}</b> target columns, one ANN with one sigmoid output node each (probabilities between 0 and 1 that do not sum to 1)</td></tr>
+    <tr><th>Target columns (1 =)</th><td>${T.map(t => `${x62E(t)} <span class="x62-muted">(1 = ${x62E(run.pos[t])})</span>`).join(', ')}</td></tr>
+    <tr><th>Network</th><td>${dims.length ? `${dims[0]} inputs → ${dims.slice(1, -1).join(' → ')} hidden (${x62E(S.opt.act)}) → ${dims[dims.length - 1]} outputs (sigmoid)` : ''}; loss: binary cross-entropy of each output, summed over the outputs; a missing target value adds no error</td></tr>
+    <tr><th>Hyperparameters</th><td>${x62E(x62ParamText(S.best.params))}; ${S.epochs} epochs in the final fit</td></tr>
+    <tr><th>Rows</th><td>${S.n} used (${S.trRows.length} training, ${S.teRows.length} Test Set)${S.dropAll ? `; ${S.dropAll} left out with every target missing` : ''}${S.dropInc ? `; ${S.dropInc} left out with a missing predictor (Drop rows)` : ''}${S.h ? `; forecast horizon h = ${S.h}` : ''}</td></tr>
+    <tr><th>Predictors</th><td>${S.features.length}: ${S.features.slice(0, 30).map(x62E).join(', ')}${S.features.length > 30 ? ', ...' : ''}</td></tr>
+    <tr><th>Evaluation</th><td>${split}; ${S.kFolds}-fold cross-validation on the training set${S.splitStrategy === 'time_series' ? ` (${x62E(S.cvScheme)})` : ''}; seed ${x62E(seed)}</td></tr>
+    <tr><th>Preprocessing</th><td>imputation: ${x62E(S.imputeType)}; outliers: ${x62E(S.outlierType)}; scaling: ${x62E(S.scalingType)}; all fitted on the fitting rows only (in each fold, and on the training set for the final model)</td></tr>
+    <tr><th>Class imbalance</th><td>${imbTxt}</td></tr>
+    <tr><th>Tuning and selection</th><td>${S.grid.length} setting${S.grid.length > 1 ? 's' : ''}; selection by the CV ${sel[0]} averaged over the outputs${['f1', 'bal', 'acc'].includes(S.selKey) ? ' (cutoff 0.5 during tuning)' : ''}</td></tr>
+    <tr><th>Cutoffs</th><td>${T.map((t, j) => `${x62E(t)} ${C.cuts[j].toFixed(3)}`).join(', ')} <span class="x62-muted">(${x62E(X62_RULES[X62.rule])})</span></td></tr>
+    <tr><th>Time</th><td>${((Date.now() - S.t0) / 1000).toFixed(1)} s</td></tr>
+  </tbody></table>${tune ? `<details class="x62-det"><summary>Optimized Hyperparameters: the CV score of each setting</summary>${tune}</details>` : ''}`;
+}
+function x62Grid(S, i) { return S.gridCv ? S.gridCv[i] : (S.gridCvAll || [])[i]; }
+function x62RenderMetrics(run, C) {
+  const b = document.getElementById('x62MetricsCardBody'); if (!b) return;
+  const S = run.S, T = run.T;
+  // target columns
+  const cnt = (Y, j) => { let n1 = 0, n0 = 0, miss = 0; Y.forEach(y => { if (y[j] === 1) n1++; else if (y[j] === 0) n0++; else miss++; }); return { n1, n0, miss }; };
+  const classTab = `<table class="x62-tab"><thead><tr><th>Output</th><th>Training: 1s</th><th>share of 1s</th><th>missing</th><th>Test Set: 1s</th><th>share of 1s</th><th>missing</th></tr></thead><tbody>${T.map((t, j) => {
+    const a = cnt(S.YtrAll, j), e = cnt(S.Yte, j);
+    return `<tr><td>${x62E(t)}</td><td>${a.n1}</td><td>${x62F(a.n1 / Math.max(1, a.n1 + a.n0), 'pct')}</td><td>${a.miss}</td><td>${e.n1}</td><td>${x62F(e.n1 / Math.max(1, e.n1 + e.n0), 'pct')}</td><td>${e.miss}</td></tr>`;
+  }).join('')}</tbody></table>`;
+  const rare = T.filter((t, j) => { const a = cnt(S.YtrAll, j); return a.n1 < 20; });
+  // overview
+  const ov = `<table class="x62-tab x62-ov"><thead><tr><th>Output</th><th class="x62-cvh v46-selcol">CV AUC</th><th>Test AUC</th><th>Test log loss</th><th>Test Brier</th><th>Test sensitivity</th><th>Test specificity</th><th>Test F1</th><th>Cutoff</th></tr></thead><tbody>${T.map((t, j) => {
+    const o = C.out[j];
+    return `<tr><td><a href="#" onclick="x62View(${j});return false;">${x62E(t)}</a></td><td class="x62-cv v46-selcol">${x62FSe(o.cv.auc, 3)}</td><td>${x62F(o.te && o.te.auc, 3)}</td><td>${x62F(o.te && o.te.logloss, 4)}</td><td>${x62F(o.te && o.te.brier, 4)}</td><td>${x62F(o.te && o.te.sens, 3)}</td><td>${x62F(o.te && o.te.spec, 3)}</td><td>${x62F(o.te && o.te.f1, 3)}</td><td>${C.cuts[j].toFixed(3)}</td></tr>`;
+  }).join('')}<tr class="x62-avgrow"><td><a href="#" onclick="x62View('avg');return false;">Average over the outputs</a></td><td class="x62-cv v46-selcol">${x62FSe(C.avg.auc.cv, 3)}</td><td>${x62F(C.avg.auc.te, 3)}</td><td>${x62F(C.avg.logloss.te, 4)}</td><td>${x62F(C.avg.brier.te, 4)}</td><td>${x62F(C.avg.sens.te, 3)}</td><td>${x62F(C.avg.spec.te, 3)}</td><td>${x62F(C.avg.f1.te, 3)}</td><td></td></tr></tbody></table>`;
+  // detail of one output or the average
+  const v = X62.view;
+  const isAvg = v === 'avg' || !(v >= 0 && v < T.length);
+  const btns = `<div class="x62-viewbar">${[['avg', 'Average over the outputs']].concat(T.map((t, j) => [j, t])).map(([k, l]) => `<button type="button" class="x62-vbtn${(isAvg && k === 'avg') || (!isAvg && k === v) ? ' on' : ''}" onclick="x62View(${k === 'avg' ? "'avg'" : k})">${x62E(l)}</button>`).join('')}</div>`;
+  const row = ([k, lab, d]) => {
+    if (isAvg) { const a = C.avg[k]; return `<tr><td>${lab}</td><td class="x62-cv v46-selcol">${x62FSe(a.cv, d)}</td><td>${x62F(a.tr, d)}</td><td>${x62F(a.te, d)}</td><td class="x62-bench">${x62F(a.bShare, d)}</td><td class="x62-bench">${x62F(a.bMaj, d)}</td></tr>`; }
+    const o = C.out[v];
+    return `<tr><td>${lab}</td><td class="x62-cv v46-selcol">${x62FSe(o.cv[k], d)}</td><td>${x62F(o.tr && o.tr[k], d)}</td><td>${x62F(o.te && o.te[k], d)}</td><td class="x62-bench">${x62F(o.bShare && o.bShare[k], d)}</td><td class="x62-bench">${x62F(o.bMaj && o.bMaj[k], d)}</td></tr>`;
+  };
+  const det = `<div class="x62-scroll"><table class="x62-tab x62-det-tab"><thead><tr><th>${isAvg ? 'Average over the outputs' : x62E(T[v])}</th><th class="x62-cvh v46-selcol">CV (validation folds)<br><span class="x62-muted">mean ± SE</span></th><th>Training</th><th>Test Set</th><th>Benchmark: share of 1s<br><span class="x62-muted">Test Set</span></th><th>Benchmark: majority class<br><span class="x62-muted">Test Set</span></th></tr></thead><tbody>${X62_MROWS.map(row).join('')}</tbody></table></div>`;
+  const st = C.set;
+  const setRow = (lab, k, d) => `<tr><td>${lab}</td><td class="x62-cv v46-selcol">${x62FSe(st.cv[k], d)}</td><td>${x62F(st.tr[k], d)}</td><td>${x62F(st.te[k], d)}</td></tr>`;
+  const setTab = `<table class="x62-tab"><thead><tr><th>The whole set of answers</th><th class="x62-cvh v46-selcol">CV, mean ± SE</th><th>Training</th><th>Test Set</th></tr></thead><tbody>
+    ${setRow('Exact match: share of rows with every output right', 'exact', 'pct')}${setRow('Hamming loss: share of wrong answers (rows × outputs)', 'hamming', 4)}
+    ${setRow('At least one 1: accuracy', 'anyAcc', 'pct')}${setRow('At least one 1: sensitivity', 'anySens', 3)}${setRow('At least one 1: specificity', 'anySpec', 3)}${setRow('At least one 1: AUC (probability 1 − Π(1 − p))', 'anyAuc', 3)}
+  </tbody></table><div class="x62-note">Rows with every output present: ${st.te.nAll} in the Test Set${Number.isFinite(st.te.anyShare) ? `, of which ${x62F(st.te.anyShare, 'pct')} have at least one 1` : ''}. The Hamming loss counts every present answer.</div>`;
+  b.innerHTML = `<details class="x62-det" open><summary>Target columns: counts of 1s and missing values</summary>${classTab}${rare.length ? `<div class="x62-warnbox">Few 1s in the training set for ${rare.map(x62E).join(', ')} (fewer than 20): their metrics are uncertain; consider Class weights in Class imbalance.</div>` : ''}</details>
+    <h4 class="x62-h4">Each output (Test Set, with the CV AUC)</h4>${ov}
+    <h4 class="x62-h4">All the metrics</h4>${btns}${det}
+    <div class="x62-note">CV: the out-of-fold predictions of the chosen setting, each output on its validation rows where its value is present; the SE is across the folds. AUC, PR-AUC and MCC are n/a in a fold where an output has one value only.</div>
+    <h4 class="x62-h4">The whole set of answers</h4>${setTab}`;
+}
+function x62View(k) { X62.view = k; if (X62.run) x62RenderMetrics(X62.run, X62.run.C); }
+function x62RenderCmp(run, C) {
+  const card = document.getElementById('x62CmpCard'), b = document.getElementById('x62CmpCardBody'); if (!b) return;
+  if (!C.cmp) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const T = run.T, nm = ['Shared ANN', 'Separate ANN', 'Logistic Regression'];
+  const best3 = (arr, dir) => { let bi = -1, bv = null; arr.forEach((o, i) => { const v = o && Number.isFinite(o.mean) ? o.mean : NaN; if (Number.isFinite(v) && (bv === null || dir * v > dir * bv)) { bv = v; bi = i; } }); return bi; };
+  const rows = T.map((t, j) => {
+    const c = C.cmp[j], ba = best3(c.cvAuc, 1), bl = best3(c.cvLl, -1);
+    return `<tr><td>${x62E(t)}</td>${c.cvAuc.map((o, i) => `<td class="x62-cv v46-selcol${i === ba ? ' x62-cvbest' : ''}">${x62FSe(o, 3)}</td>`).join('')}${c.cvLl.map((o, i) => `<td class="x62-cv v46-selcol${i === bl ? ' x62-cvbest' : ''}">${x62FSe(o, 4)}</td>`).join('')}${c.teAuc.map(v => `<td>${x62F(v, 3)}</td>`).join('')}${c.teLl.map(v => `<td>${x62F(v, 4)}</td>`).join('')}</tr>`;
+  });
+  const av = (pick) => { const v = C.cmp.map(pick).filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN; };
+  const avgRow = `<tr class="x62-avgrow"><td>Average over the outputs</td>${[0, 1, 2].map(i => `<td class="x62-cv v46-selcol">${x62F(av(c => c.cvAuc[i] && c.cvAuc[i].mean), 3)}</td>`).join('')}${[0, 1, 2].map(i => `<td class="x62-cv v46-selcol">${x62F(av(c => c.cvLl[i] && c.cvLl[i].mean), 4)}</td>`).join('')}${[0, 1, 2].map(i => `<td>${x62F(av(c => c.teAuc[i]), 3)}</td>`).join('')}${[0, 1, 2].map(i => `<td>${x62F(av(c => c.teLl[i]), 4)}</td>`).join('')}</tr>`;
+  const head = (g) => nm.map(n => `<th${g === 'cv' ? ' class="x62-cvh v46-selcol"' : ''}>${n}</th>`).join('');
+  b.innerHTML = `<div class="x62-explain">Is one network for all the outputs better than one model per output? Each output is also fitted with a <b>separate ANN</b> (the chosen setting, one output node, the same loss) and a <b>Logistic Regression</b>, on the same folds and the same Test Set. The best CV value of each row is highlighted.</div>
+    <div class="x62-scroll"><table class="x62-tab x62-cmp"><thead><tr><th rowspan="2">Output</th><th colspan="3" class="x62-cvh v46-selcol">CV AUC (mean ± SE)</th><th colspan="3" class="x62-cvh v46-selcol">CV log loss (mean ± SE)</th><th colspan="3">Test Set AUC</th><th colspan="3">Test Set log loss</th></tr><tr>${head('cv')}${head('cv')}${head()}${head()}</tr></thead><tbody>${rows.join('')}${avgRow}</tbody></table></div>`;
+}
+function x62RenderCm(run, C) {
+  const b = document.getElementById('x62CmCardBody'); if (!b) return;
+  const S = run.S, T = run.T;
+  b.innerHTML = `<div class="x62-cmgrid">${T.map((t, j) => {
+    const y = [], d = []; S.Yte.forEach((r, i) => { const v = r[j]; if (v === 0 || v === 1) { y.push(v); d.push(S.PTe[i][j] >= C.cuts[j] ? 1 : 0); } });
+    const cm = calculateConfusionMatrix(y, d), n1 = cm.tp + cm.fn, n0 = cm.tn + cm.fp;
+    const pc = (a, n) => n ? ` <span class="x62-muted">${(100 * a / n).toFixed(1)}%</span>` : '';
+    return `<div class="x62-cmbox"><div class="x62-cmt" title="${x62E(t)}">${x62E(t)} <span class="x62-muted">cutoff ${C.cuts[j].toFixed(3)}</span></div>
+      <table class="x62-cm" data-v41done="1"><thead><tr><th></th><th>Predicted 0</th><th>Predicted 1</th></tr></thead><tbody>
+      <tr><th>Actual 0</th><td class="x62-ok">${cm.tn}${pc(cm.tn, n0)}</td><td class="x62-bad">${cm.fp}${pc(cm.fp, n0)}</td></tr>
+      <tr><th>Actual 1</th><td class="x62-bad">${cm.fn}${pc(cm.fn, n1)}</td><td class="x62-ok">${cm.tp}${pc(cm.tp, n1)}</td></tr></tbody></table></div>`;
+  }).join('')}</div><div class="x62-note">Counts, and % of the actual class. Rows where the output is missing are not counted for that output.</div>`;
+}
+function x62PredRows(run, C) {
+  const S = run.S, T = run.T, te = X62.predSet !== 'train';
+  const rows = te ? S.teRows : S.fitKeep.map(k => S.trRows[k]);
+  const Y = te ? S.Yte : S.Ytr, P = te ? S.PTe : S.PTr;
+  const meta = x62MetaCols();
+  return rows.map((r, i) => {
+    const o = { Row: r.__ri + 1 };
+    meta.forEach(c => { const v = rawData[r.__ri] ? rawData[r.__ri][c] : ''; o[c] = v === null || v === undefined ? '' : v; });
+    let k = 0;
+    T.forEach((t, j) => { const d = P[i][j] >= C.cuts[j] ? 1 : 0; k += d; o[`${t}: actual`] = Y[i][j] === null ? '' : Y[i][j]; o[`${t}: probability`] = +P[i][j].toFixed(6); o[`${t}: predicted`] = d; });
+    o['Predicted 1s'] = k;
+    return o;
+  });
+}
+function x62MetaCols() {
+  try {
+    if (!rawData || !rawData.length) return [];
+    return Object.keys(rawData[0]).filter(c => c !== '__ri' && isMetaVariable(c, rawData.map(r => r[c]))).slice(0, 3);
+  } catch (e) { return []; }
+}
+function x62RenderPred(run, C) {
+  const b = document.getElementById('x62PredCardBody'); if (!b) return;
+  const R = x62PredRows(run, C), T = run.T, max = 500, meta = x62MetaCols();
+  const sh = R.slice(0, max);
+  b.innerHTML = `<div class="x62-viewbar"><button type="button" class="x62-vbtn${X62.predSet !== 'train' ? ' on' : ''}" onclick="x62PredSet('test')">Test Set (${run.S.teRows.length} rows)</button><button type="button" class="x62-vbtn${X62.predSet === 'train' ? ' on' : ''}" onclick="x62PredSet('train')">Training rows (${run.S.fitKeep.length})</button>
+    <button type="button" class="btn-chart-dl x62-xl" onclick="x62ExportPred()">Export to Excel (.xlsx)</button></div>
+    <div class="x62-scroll x62-predwrap"><table class="x62-tab x62-pred"><thead><tr><th rowspan="2">Row</th>${meta.map(c => `<th rowspan="2">${x62E(c)}</th>`).join('')}${T.map(t => `<th colspan="3" title="${x62E(t)}">${x62E(t)}</th>`).join('')}<th rowspan="2">Predicted 1s</th></tr><tr>${T.map(() => '<th>Actual</th><th>Probability</th><th>Predicted</th>').join('')}</tr></thead><tbody>${sh.map(o => `<tr><td>${o.Row}</td>${meta.map(c => `<td>${x62E(o[c])}</td>`).join('')}${T.map(t => { const a = o[`${t}: actual`], d = o[`${t}: predicted`]; const wrong = a !== '' && a !== d; return `<td>${a === '' ? '<span class="x62-na">missing</span>' : a}</td><td>${o[`${t}: probability`].toFixed(4)}</td><td class="${wrong ? 'x62-bad' : ''}">${d}</td>`; }).join('')}<td>${o['Predicted 1s']}</td></tr>`).join('')}</tbody></table></div>
+    ${R.length > max ? `<div class="x62-note">The first ${max} of ${R.length} rows; the Excel file has all of them.</div>` : ''}<div class="x62-note">Row: the row number in the data as the app uses it (sorted by date when the file has one). A predicted value that differs from the actual one is marked.</div>`;
+}
+function x62PredSet(s) { X62.predSet = s; if (X62.run) x62RenderPred(X62.run, X62.run.C); }
+function x62ExportPred() {
+  if (!X62.run) return;
+  try {
+    const wb = XLSX.utils.book_new();
+    const keep = X62.predSet;
+    X62.predSet = 'test'; XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(x62PredRows(X62.run, X62.run.C)), 'Test Set');
+    X62.predSet = 'train'; XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(x62PredRows(X62.run, X62.run.C)), 'Training rows');
+    X62.predSet = keep;
+    XLSX.writeFile(wb, '4CastLab_Several_Outputs_Predictions.xlsx');
+  } catch (e) { console.error('v62 export', e); showValidationBanner('Export failed: ' + (e && e.message ? e.message : e)); }
+}
+
+/* =====================================================================
+   v6.2, stage 2 (layer v62, part 2), Perry 26 Nov 2026 ("OK can we build now?"):
+   the other tabs, reports, the Python script, sessions, the network card,
+   the learning curve, the Run History entry.
+   ===================================================================== */
+const X62_PAL = (typeof X48_PAL !== 'undefined' && X48_PAL.length >= 10) ? X48_PAL : ['#1F77B4', '#E07B39', '#2CA02C', '#D62728', '#9467BD', '#8C564B', '#E377C2', '#7F7F7F', '#BCBD22', '#17BECF'];
+function x62Colr(j) { return X62_PAL[j % X62_PAL.length]; }
+function x62Chart(id, cfg) {
+  try { if (X62.charts[id]) X62.charts[id].destroy(); } catch (e) {}
+  const cv = document.getElementById(id); if (!cv) return null;
+  X62.charts[id] = new Chart(cv, cfg);
+  return X62.charts[id];
+}
+function x62Rng(off) { try { return v45Rng(((globalState && globalState.x47Seed) || (typeof x47SeedUsed === 'function' && x47SeedUsed()) || 42) * 7919 + off); } catch (e) { let s = 12345 + off; return () => { s = (1664525 * s + 1013904223) >>> 0; return s / 4294967296; }; } }
+function x62Sig(S) {
+  const parts = [S.trRows.length, S.teRows.length, S.T, S.features, S.kFolds, S.cvScheme, S.splitStrategy, S.embargoRows, S.hpMode, S.det ? 1 : 0, String(currentSeed),
+    S.scalingType, S.imputeType, S.outlierType, S.useW ? 1 : 0, S.selKey, S.compare ? 1 : 0, JSON.stringify(S.grid), JSON.stringify(S.opt), S.h];
+  try { return x47Hash(parts); } catch (e) { return JSON.stringify(parts).length + ':' + JSON.stringify(parts).slice(0, 200); }
+}
+function x62Sel(id, opts, val, onch) {
+  return `<select id="${id}" class="x62-sel" onchange="${onch}">${opts.map(([v, l]) => `<option value="${v}"${String(v) === String(val) ? ' selected' : ''}>${x62E(l)}</option>`).join('')}</select>`;
+}
+function x62OutOpts(run) { return run.T.map((t, j) => [j, t]); }
+function x62Present(run, j) { const S = run.S, y = [], p = [], idx = []; S.Yte.forEach((r, i) => { const v = r[j]; if (v === 0 || v === 1) { y.push(v); p.push(S.PTe[i][j]); idx.push(i); } }); return { y, p, idx }; }
+
+/* rows (encoded) -> probabilities with the final model's preprocessing; rows a Drop-rows model cannot read are left out */
+function x62Apply(rows, S) {
+  let A = rows.map((r, i) => { const o = { __x62i: i }; S.features.forEach(f => { const v = r[f]; o[f] = x62Miss(v) ? null : Number(v); }); return o; });
+  if (S.imp) A = applyImputation(A, S.imp);
+  if (S.bnd) A = applyOutlierBounds(A, S.bnd, false);
+  const ok = [], X = [];
+  A.forEach((o, i) => { const v = S.features.map(f => Number(o[f])); if (v.every(Number.isFinite)) { ok.push(i); X.push(S.sc.scaleRow(v)); } });
+  return { rows, ok, P: X.length ? S.model.proba(X) : [] };
+}
+
+/* ---------- Run History ---------- */
+function x62RecordRun(run) {
+  if (typeof V41 === 'undefined' || !Array.isArray(V41.runs)) return;
+  const S = run.S, C = run.C;
+  V41.runSeq = (V41.runSeq || 0) + 1;
+  V41.runs.push({
+    dataset: (typeof currentDatasetFileName !== 'undefined' && currentDatasetFileName) || 'dataset',
+    target: `${S.T.length} outputs: ${S.T.join(', ')}` + (S.h ? ` (t+${S.h})` : ''), nFeat: S.features.length, features: S.features.join(', '),
+    split: (S.splitStrategy === 'time_series' ? `time series${S.embargoRows ? ', purge ' + S.embargoRows : ''}` : 'random') + `, seed ${(() => { try { return x47SeedUsed(); } catch (e) { return ''; } })()}`,
+    ratio: Math.round(S.trainRatio * 100), cv: `${S.kFolds}-fold`, scaling: S.scalingType, isClass: true,
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), nTrain: S.trRows.length, nVal: S.teRows.length,
+    run: V41.runSeq, mode: 'single', algo: `ANN (${S.T.length} outputs)`, params: x62ParamText(S.best.params), x62: true,
+    m: { auc: C.avg.auc.te, prauc: C.avg.prauc.te, acc: C.avg.acc.te, f1: C.avg.f1.te, bal: C.avg.bal.te, thr: NaN },
+    cvScore: C.avg[S.selKey] && C.avg[S.selKey].cv ? C.avg[S.selKey].cv.mean : NaN
+  });
+  if (V41.runs.length > 200) V41.runs = V41.runs.slice(-200);
+  try { v41RenderRunHistory(); } catch (e) {}
+}
+
+/* ---------- the network and its learning curve ---------- */
+function x62NetSvg(run) {
+  const S = run.S, dims = S.dims || [], wts = S.model && S.model.weights ? S.model.weights() : null;
+  if (!dims.length) return '';
+  const maxShow = 10, W = 760, H = 330, padL = 150, padR = 150;
+  const layers = dims.map((n, l) => {
+    const show = n > maxShow ? maxShow - 1 : n;
+    const idx = Array.from({ length: show }, (_, i) => i);
+    return { n, idx, more: n - show };
+  });
+  const xs = layers.map((_, l) => padL + (W - padL - padR) * (layers.length === 1 ? 0 : l / (layers.length - 1)));
+  const yOf = (L, k) => { const cnt = L.idx.length + (L.more ? 1 : 0); return 22 + (H - 44) * (cnt === 1 ? 0.5 : k / (cnt - 1)); };
+  let maxW = 1e-9; if (wts) wts.W.forEach(m => m.forEach(r => r.forEach(v => { maxW = Math.max(maxW, Math.abs(v)); })));
+  let edges = '';
+  for (let l = 0; l < layers.length - 1; l++) {
+    const A = layers[l], Bn = layers[l + 1];
+    Bn.idx.forEach((r, kb) => A.idx.forEach((c, ka) => {
+      const w = wts ? wts.W[l][r][c] : 0, a = wts ? 0.08 + 0.72 * Math.abs(w) / maxW : 0.15;
+      edges += `<line x1="${xs[l]}" y1="${yOf(A, ka)}" x2="${xs[l + 1]}" y2="${yOf(Bn, kb)}" stroke="${w >= 0 ? '#1F77B4' : '#E07B39'}" stroke-opacity="${a.toFixed(3)}" stroke-width="${(0.5 + 1.6 * (wts ? Math.abs(w) / maxW : 0)).toFixed(2)}"/>`;
+    }));
+  }
+  let nodes = '';
+  layers.forEach((L, l) => {
+    L.idx.forEach((i, k) => {
+      const out = l === layers.length - 1, inp = l === 0, y = yOf(L, k);
+      nodes += `<circle cx="${xs[l]}" cy="${y}" r="${out ? 8 : 6.5}" fill="${out ? x62Colr(i) : 'var(--card, #fff)'}" stroke="${out ? x62Colr(i) : 'var(--muted, #667)'}" stroke-width="1.6"/>`;
+      if (inp) nodes += `<text x="${xs[l] - 12}" y="${y + 4}" text-anchor="end" font-size="11" fill="var(--text, #222)">${x62E(String(S.features[i]).slice(0, 22))}</text>`;
+      if (out) nodes += `<text x="${xs[l] + 14}" y="${y + 4}" font-size="11.5" font-weight="600" fill="var(--text, #222)">${x62E(String(run.T[i]).slice(0, 22))}</text>`;
+    });
+    if (L.more) { const y = yOf(L, L.idx.length); nodes += `<text x="${xs[l]}" y="${y + 4}" text-anchor="middle" font-size="11" fill="var(--muted, #667)">+${L.more}</text>`; }
+    const lab = l === 0 ? `${L.n} inputs` : l === layers.length - 1 ? `${L.n} outputs (sigmoid)` : `hidden ${l}: ${L.n} (${S.opt.act})`;
+    nodes += `<text x="${xs[l]}" y="${H - 2}" text-anchor="middle" font-size="10.5" fill="var(--muted, #667)">${x62E(lab)}</text>`;
+  });
+  return `<svg class="x62-net" viewBox="0 0 ${W} ${H + 10}" role="img" aria-label="The network: inputs, hidden layers and one output node per target column">${edges}${nodes}</svg>`;
+}
+function x62RenderNet(run) {
+  const b = document.getElementById('x62NetCardBody'); if (!b) return;
+  const S = run.S, cv = S.curve || {};
+  b.innerHTML = `<div class="x62-explain">Each target column has its own output node; the hidden layers are shared by all the outputs. Lines: the weights of the final network (blue positive, orange negative; darker and thicker = larger). With more than 10 nodes in a layer, 9 are drawn.</div>
+    ${x62NetSvg(run)}
+    <div class="x62-chartbox"><canvas id="x62CurveChart"></canvas></div>
+    <div class="x62-note">Learning curve of the final fit: the mean training log loss per row of each output, by epoch${cv.curveHold && cv.curveHold.length ? `, and the loss on the held-out ${cv.nHold} rows used for early stopping (the network of the best epoch is kept)` : ''}. ${S.epochs} epochs.</div>`;
+  const E = (cv.curve || []).length; if (!E) return;
+  const ds = run.T.map((t, j) => ({ label: t, data: cv.curveOut[j], borderColor: x62Colr(j), backgroundColor: x62Colr(j), borderWidth: 1.6, pointRadius: 0, tension: 0.2 }));
+  if (cv.curveHold && cv.curveHold.length) ds.push({ label: 'Held-out rows (sum over the outputs)', data: cv.curveHold, borderColor: '#222', borderDash: [6, 4], borderWidth: 2, pointRadius: 0, yAxisID: 'y2' });
+  x62Chart('x62CurveChart', { type: 'line', data: { labels: Array.from({ length: E }, (_, i) => i + 1), datasets: ds }, options: { responsive: true, maintainAspectRatio: false, animation: false,
+    scales: { x: { title: { display: true, text: 'Epoch' } }, y: { title: { display: true, text: 'Training log loss per row' } }, ...(cv.curveHold && cv.curveHold.length ? { y2: { position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Held-out loss' } } } : {}) } } });
+}
+
+/* ---------- Diagnostics: ROC and calibration ---------- */
+function x62RenderRoc(run, C) {
+  const b = document.getElementById('x62RocCardBody'); if (!b) return;
+  b.innerHTML = `<div class="x62-explain">One ROC curve per output, each on the Test Set rows where that output is present. Click a name in the legend to hide or show its curve.</div><div class="x62-chartbox x62-tall"><canvas id="x62RocChart"></canvas></div>`;
+  const ds = run.T.map((t, j) => {
+    const { y, p } = x62Present(run, j);
+    const pts = new Set(y).size === 2 ? x48RocPoints(y, p) : [];
+    const auc = C.out[j].te ? C.out[j].te.auc : NaN;
+    return { label: `${t} (AUC ${Number.isFinite(auc) ? auc.toFixed(3) : 'n/a'})`, data: pts, borderColor: x62Colr(j), backgroundColor: x62Colr(j), borderWidth: 2, pointRadius: 0, showLine: true };
+  });
+  ds.push({ label: 'Chance', data: [{ x: 0, y: 0 }, { x: 1, y: 1 }], borderColor: '#999', borderDash: [5, 5], borderWidth: 1, pointRadius: 0, showLine: true });
+  x62Chart('x62RocChart', { type: 'scatter', data: { datasets: ds }, options: { responsive: true, maintainAspectRatio: false, animation: false,
+    scales: { x: { min: 0, max: 1, title: { display: true, text: 'False positive rate (1 − specificity)' } }, y: { min: 0, max: 1, title: { display: true, text: 'True positive rate (sensitivity)' } } } } });
+}
+function x62CalBins(y, p) {
+  const bins = Array.from({ length: 10 }, () => ({ n: 0, sp: 0, sy: 0 }));
+  y.forEach((v, i) => { const k = Math.min(9, Math.floor(p[i] * 10)); bins[k].n++; bins[k].sp += p[i]; bins[k].sy += v; });
+  const N = y.length; let ece = 0;
+  bins.forEach(b => { if (b.n) ece += b.n / N * Math.abs(b.sp / b.n - b.sy / b.n); });
+  return { bins, ece };
+}
+function x62RenderCal(run, C) {
+  const b = document.getElementById('x62CalCardBody'); if (!b) return;
+  const j = Math.min(X62.calOut, run.T.length - 1);
+  const rows = run.T.map((t, k) => { const { y, p } = x62Present(run, k); const c = x62CalBins(y, p); return { t, n: y.length, brier: C.out[k].te ? C.out[k].te.brier : NaN, ece: c.ece, share: y.length ? y.reduce((a, v) => a + v, 0) / y.length : NaN, meanP: p.length ? p.reduce((a, v) => a + v, 0) / p.length : NaN }; });
+  b.innerHTML = `<div class="x62-explain">Do the predicted probabilities match how often a flag is really 1? The Test Set rows of an output are put in 10 bins of predicted probability (0-0.1, ..., 0.9-1); each point is a bin: mean predicted probability against the share of 1s. On the diagonal = well calibrated. ECE: the expected calibration error, the bins' gaps weighted by their rows.</div>
+    <div class="x62-viewbar no-print"><label class="x62-inl">Output ${x62Sel('x62CalSel', x62OutOpts(run), j, 'X62.calOut=+this.value; x62RenderCal(X62.run, X62.run.C)')}</label></div>
+    <div class="x62-chartbox"><canvas id="x62CalChart"></canvas></div>
+    <table class="x62-tab"><thead><tr><th>Output</th><th>Rows</th><th>Share of 1s</th><th>Mean predicted probability</th><th>Brier score</th><th>ECE (10 bins)</th></tr></thead><tbody>${rows.map(r => `<tr><td>${x62E(r.t)}</td><td>${r.n}</td><td>${x62F(r.share, 'pct')}</td><td>${x62F(r.meanP, 'pct')}</td><td>${x62F(r.brier, 4)}</td><td>${x62F(r.ece, 4)}</td></tr>`).join('')}</tbody></table>`;
+  const { y, p } = x62Present(run, j), cb = x62CalBins(y, p);
+  const pts = cb.bins.map(bb => bb.n ? { x: bb.sp / bb.n, y: bb.sy / bb.n, r: Math.max(3, Math.min(14, Math.sqrt(bb.n))), n: bb.n } : null).filter(Boolean);
+  x62Chart('x62CalChart', { type: 'bubble', data: { datasets: [
+    { label: `${run.T[j]}: bins (size = rows)`, data: pts, backgroundColor: x62Colr(j) + 'AA', borderColor: x62Colr(j) },
+    { type: 'line', label: 'Perfect calibration', data: [{ x: 0, y: 0 }, { x: 1, y: 1 }], borderColor: '#999', borderDash: [5, 5], borderWidth: 1, pointRadius: 0 }] },
+    options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { type: 'linear', min: 0, max: 1, title: { display: true, text: 'Mean predicted probability' } }, y: { min: 0, max: 1, title: { display: true, text: 'Share of 1s' } } },
+      plugins: { tooltip: { callbacks: { label: c => c.raw && c.raw.n ? `predicted ${c.raw.x.toFixed(3)}, actual ${c.raw.y.toFixed(3)}, ${c.raw.n} rows` : '' } } } } });
+}
+
+/* ---------- Bootstrap ---------- */
+const X62_BKEYS = [['auc', 'AUC', 3], ['logloss', 'Log loss', 4], ['brier', 'Brier score', 4], ['acc', 'Accuracy', 'pct'], ['bal', 'Balanced accuracy', 3], ['sens', 'Sensitivity', 3], ['spec', 'Specificity', 3], ['f1', 'F1', 3]];
+function x62RenderBootSetup(run) {
+  const b = document.getElementById('x62BootCardBody'); if (!b) return;
+  const ts = run.S.splitStrategy === 'time_series';
+  b.innerHTML = `<div class="x62-explain">The network is kept fixed; the ${run.S.teRows.length} Test Set rows are resampled with replacement (whole rows, so the outputs of a row stay together) and every metric is recomputed. The 2.5% and 97.5% percentiles give a 95% interval.${ts ? ' The rows are time-ordered: moving blocks of rows are resampled (block length about the cube root of the number of rows).' : ''}</div>
+    <div class="x62-viewbar no-print"><label class="x62-inl">Resamples <input type="number" id="x62BootB" min="100" max="10000" step="100" value="${X62.bootB}"></label><button type="button" class="btn-secondary x62-btn" onclick="x62RunBoot(X62.run)">Compute the intervals</button></div><div id="x62BootOut"></div>`;
+  if (run.boot) x62ShowBoot(run);
+}
+function x62RunBoot(run) {
+  const B = Math.max(100, Math.min(10000, parseInt((document.getElementById('x62BootB') || {}).value, 10) || 1000)); X62.bootB = B;
+  const S = run.S, n = S.teRows.length, m = run.T.length, cuts = run.T.map(x62Cut);
+  const rnd = x62Rng(101), ts = S.splitStrategy === 'time_series', L = Math.max(1, Math.round(Math.cbrt(n)));
+  const vals = run.T.map(() => Object.fromEntries(X62_BKEYS.map(k => [k[0], []])));
+  const avg = Object.fromEntries(X62_BKEYS.map(k => [k[0], []])), setv = { exact: [], hamming: [] };
+  showProgress('Bootstrap', `Resampling the Test Set (${B} resamples)…`, 10);
+  let b = 0;
+  const step = () => {
+    const t0 = performance.now();
+    while (b < B && performance.now() - t0 < 70) {
+      const idx = [];
+      if (ts) { while (idx.length < n) { const s0 = Math.floor(rnd() * n); for (let q = 0; q < L && idx.length < n; q++) idx.push((s0 + q) % n); } }
+      else for (let i = 0; i < n; i++) idx.push(Math.floor(rnd() * n));
+      const Y = idx.map(i => S.Yte[i]), P = idx.map(i => S.PTe[i]);
+      const per = run.T.map((t, j) => x62M(Y.map(r => r[j]), P.map(r => r[j]), cuts[j]));
+      X62_BKEYS.forEach(([k]) => {
+        const v = per.map(mm => mm ? mm[k] : NaN); v.forEach((x, j) => { if (Number.isFinite(x)) vals[j][k].push(x); });
+        const f = v.filter(Number.isFinite); if (f.length === m) avg[k].push(f.reduce((a, c) => a + c, 0) / m);
+      });
+      const sm = x62SetM(Y, P, cuts); if (Number.isFinite(sm.exact)) setv.exact.push(sm.exact); if (Number.isFinite(sm.hamming)) setv.hamming.push(sm.hamming);
+      b++;
+    }
+    if (b < B) { showProgress('Bootstrap', `Resampling the Test Set: ${b} of ${B}`, 10 + Math.round(85 * b / B)); setTimeout(step, 0); return; }
+    hideProgress();
+    const q = (a, p) => { const s = a.slice().sort((u, v) => u - v); if (!s.length) return NaN; const h = (s.length - 1) * p, lo = Math.floor(h); return s[lo] + (s[Math.min(s.length - 1, lo + 1)] - s[lo]) * (h - lo); };
+    const C = run.C;
+    run.boot = { B, ts, L, cuts: cuts.slice(),
+      out: run.T.map((t, j) => X62_BKEYS.map(([k, name, d]) => ({ k, name, d, est: C.out[j].te ? C.out[j].te[k] : NaN, lo: q(vals[j][k], 0.025), hi: q(vals[j][k], 0.975) }))),
+      avg: X62_BKEYS.map(([k, name, d]) => ({ k, name, d, est: C.avg[k].te, lo: q(avg[k], 0.025), hi: q(avg[k], 0.975) })),
+      set: [['exact', 'Exact match', 'pct'], ['hamming', 'Hamming loss', 4]].map(([k, name, d]) => ({ k, name, d, est: C.set.te[k], lo: q(setv[k], 0.025), hi: q(setv[k], 0.975) })) };
+    x62ShowBoot(run);
+  };
+  setTimeout(step, 30);
+}
+function x62ShowBoot(run) {
+  const o = document.getElementById('x62BootOut'), R = run.boot; if (!o || !R) return;
+  const cell = r => `<td>${x62F(r.est, r.d)}</td><td class="x62-ci">${x62F(r.lo, r.d)} to ${x62F(r.hi, r.d)}</td>`;
+  const changed = R.cuts.some((c, j) => Math.abs(c - x62Cut(run.T[j])) > 1e-12);
+  o.innerHTML = `${changed ? '<div class="x62-warnbox">The cutoffs changed after these intervals were computed: compute them again for the threshold metrics.</div>' : ''}
+    <div class="x62-scroll"><table class="x62-tab"><thead><tr><th rowspan="2">Metric (Test Set)</th>${run.T.map(t => `<th colspan="2">${x62E(t)}</th>`).join('')}<th colspan="2">Average over the outputs</th></tr><tr>${run.T.concat(['avg']).map(() => '<th>Value</th><th>95% interval</th>').join('')}</tr></thead>
+    <tbody>${X62_BKEYS.map((k, i) => `<tr><td>${k[1]}</td>${R.out.map(rs => cell(rs[i])).join('')}${cell(R.avg[i])}</tr>`).join('')}</tbody></table></div>
+    <table class="x62-tab"><thead><tr><th>The whole set of answers</th><th>Value</th><th>95% interval</th></tr></thead><tbody>${R.set.map(r => `<tr><td>${r.name}</td>${cell(r)}</tr>`).join('')}</tbody></table>
+    <div class="x62-note">${R.B} resamples${R.ts ? `, moving blocks of ${R.L} rows` : ''}; percentile intervals.</div>`;
+}
+
+/* ---------- XAI: permutation importance ---------- */
+function x62RenderImpSetup(run) {
+  const b = document.getElementById('x62ImpCardBody'); if (!b) return;
+  b.innerHTML = `<div class="x62-explain">Each predictor in turn is shuffled across the Test Set rows (5 times) and the increase in log loss is recorded: for every output, and averaged over the outputs. A large increase means the network relies on that predictor; a predictor can matter for one output and not for another.</div>
+    <div class="x62-viewbar no-print"><button type="button" class="btn-secondary x62-btn" onclick="x62RunImp(X62.run)">Compute the permutation importance</button></div><div id="x62ImpOut"></div>`;
+  if (run.imp) x62ShowImp(run);
+}
+function x62AvgLL(run, P) {
+  const S = run.S, per = run.T.map((t, j) => { let s = 0, n = 0; S.Yte.forEach((r, i) => { const v = r[j]; if (v === 0 || v === 1) { const p = Math.min(1 - 1e-15, Math.max(1e-15, P[i][j])); s -= v ? Math.log(p) : Math.log(1 - p); n++; } }); return n ? s / n : NaN; });
+  return { per, avg: per.reduce((a, v) => a + v, 0) / per.length };
+}
+function x62RunImp(run) {
+  const S = run.S, X = S.Xa, p = S.features.length, reps = 5, m = run.T.length;
+  const base = x62AvgLL(run, S.PTe), rnd = x62Rng(202), rows = [];
+  let j = 0;
+  showProgress('Permutation importance', 'Shuffling the predictors…', 5);
+  const step = () => {
+    const t0 = performance.now();
+    while (j < p && performance.now() - t0 < 80) {
+      const dAvg = [], dOut = run.T.map(() => []);
+      for (let r = 0; r < reps; r++) {
+        const perm = fisherYatesShuffle(Array.from({ length: X.length }, (_, i) => i), rnd);
+        const Xp = X.map((row, i) => { const o = row.slice(); o[j] = X[perm[i]][j]; return o; });
+        const ll = x62AvgLL(run, S.model.proba(Xp));
+        dAvg.push(ll.avg - base.avg); ll.per.forEach((v, k) => dOut[k].push(v - base.per[k]));
+      }
+      const mean = a => a.reduce((s, v) => s + v, 0) / a.length, sd = a => { const mm = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v - mm) ** 2, 0) / Math.max(1, a.length - 1)); };
+      rows.push({ f: S.features[j], avg: mean(dAvg), sd: sd(dAvg), out: dOut.map(mean) });
+      j++;
+    }
+    if (j < p) { showProgress('Permutation importance', `Predictor ${j} of ${p}`, 5 + Math.round(90 * j / p)); setTimeout(step, 0); return; }
+    hideProgress();
+    run.imp = { rows: rows.sort((a, b) => b.avg - a.avg), reps };
+    x62ShowImp(run);
+  };
+  setTimeout(step, 30);
+}
+function x62ShowImp(run) {
+  const o = document.getElementById('x62ImpOut'), R = run.imp; if (!o || !R) return;
+  const mx = Math.max(1e-12, ...R.rows.map(r => Math.max(r.avg, ...r.out)));
+  const shade = v => { const a = Math.max(0, Math.min(1, v / mx)); return `background: rgba(31,119,180,${(0.08 + 0.5 * a).toFixed(3)});`; };
+  o.innerHTML = `<div class="x62-scroll"><table class="x62-tab"><thead><tr><th>Predictor</th><th>Average over the outputs (± SD)</th>${run.T.map(t => `<th>${x62E(t)}</th>`).join('')}</tr></thead><tbody>${R.rows.map(r => `<tr><td>${x62E(r.f)}</td><td style="${shade(r.avg)}">${r.avg.toFixed(4)} <span class="x62-se">± ${r.sd.toFixed(4)}</span></td>${r.out.map(v => `<td style="${shade(v)}">${v.toFixed(4)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+    <div class="x62-note">Increase in log loss on the Test Set when the predictor is shuffled (mean of ${R.reps} shuffles). Negative values: the predictor does not help (noise). Darker = larger increase.</div>`;
+}
+
+/* ---------- XAI: partial dependence and ICE ---------- */
+function x62RenderPdpSetup(run) {
+  const b = document.getElementById('x62PdpCardBody'); if (!b) return;
+  X62.pdpFeat = Math.min(X62.pdpFeat, run.S.features.length - 1);
+  const outs = [['all', 'All outputs (partial dependence only)']].concat(x62OutOpts(run));
+  b.innerHTML = `<div class="x62-explain">How the predicted probability changes when one predictor moves and the others stay as they are in each row. Thin lines: individual rows (ICE); thick line: their average (partial dependence). "All outputs" draws one partial dependence line per output.</div>
+    <div class="x62-viewbar no-print"><label class="x62-inl">Predictor ${x62Sel('x62PdpF', run.S.features.map((f, i) => [i, f]), X62.pdpFeat, 'X62.pdpFeat=+this.value; x62DrawPdp(X62.run)')}</label>
+    <label class="x62-inl">Output ${x62Sel('x62PdpO', outs, X62.pdpOut, "X62.pdpOut=this.value==='all'?'all':+this.value; x62DrawPdp(X62.run)")}</label></div>
+    <div class="x62-chartbox x62-tall"><canvas id="x62PdpChart"></canvas></div>`;
+  x62DrawPdp(run);
+}
+function x62DrawPdp(run) {
+  const S = run.S, X = S.Xf, j = X62.pdpFeat, c = X62.pdpOut;
+  if (!X.length || j >= S.features.length) return;
+  const col = X.map(r => r[j]).slice().sort((a, b) => a - b), uniq = Array.from(new Set(col));
+  const grid = uniq.length <= 20 ? uniq : Array.from({ length: 20 }, (_, g) => col[Math.min(col.length - 1, Math.round(g / 19 * (col.length - 1)))]).filter((v, i, a) => i === 0 || v !== a[i - 1]);
+  const rnd = x62Rng(303);
+  const sample = fisherYatesShuffle(Array.from({ length: X.length }, (_, i) => i), rnd).slice(0, Math.min(X.length, 200));
+  const P = S.model.proba([].concat(...sample.map(i => grid.map(v => { const o = X[i].slice(); o[j] = v; return o; }))));
+  const unscale = v => { try { const u = S.sc.unscaleValue(j, v); return Number.isFinite(u) ? u : v; } catch (e) { return v; } };
+  const xs = grid.map(unscale), G = grid.length;
+  const line = (s, k) => grid.map((v, g) => P[s * G + g][k]);
+  const pd = k => grid.map((v, g) => { let a = 0; for (let s = 0; s < sample.length; s++) a += P[s * G + g][k]; return a / sample.length; });
+  let ds;
+  if (c === 'all') ds = run.T.map((t, k) => ({ label: t, data: pd(k).map((v, g) => ({ x: xs[g], y: v })), borderColor: x62Colr(k), backgroundColor: x62Colr(k), borderWidth: 2.5, pointRadius: 2, showLine: true }));
+  else {
+    ds = sample.slice(0, 40).map((_, s) => ({ label: '', data: line(s, c).map((v, g) => ({ x: xs[g], y: v })), borderColor: 'rgba(120,130,150,0.25)', borderWidth: 1, pointRadius: 0, showLine: true }));
+    ds.push({ label: `Partial dependence: P(${run.T[c]} = 1)`, data: pd(c).map((v, g) => ({ x: xs[g], y: v })), borderColor: x62Colr(c), backgroundColor: x62Colr(c), borderWidth: 3, pointRadius: 2, showLine: true });
+  }
+  x62Chart('x62PdpChart', { type: 'scatter', data: { datasets: ds }, options: { responsive: true, maintainAspectRatio: false, animation: false,
+    scales: { x: { title: { display: true, text: S.features[j] } }, y: { min: 0, max: 1, title: { display: true, text: 'Predicted probability of 1' } } },
+    plugins: { legend: { labels: { filter: it => !!it.text } }, tooltip: { filter: it => !!ds[it.datasetIndex].label } } } });
+}
+
+/* ---------- XAI: SHAP values of one output ---------- */
+function x62RenderShapSetup(run) {
+  const b = document.getElementById('x62ShapCardBody'); if (!b) return;
+  X62.shapOut = Math.min(X62.shapOut, run.T.length - 1);
+  b.innerHTML = `<div class="x62-explain">How much each predictor moves the predicted probability of one output, row by row, from the average prediction (the background: the mean of the training rows). Estimated by sampling permutations of the predictors (25 per row, 40 Test Set rows).</div>
+    <div class="x62-viewbar no-print"><label class="x62-inl">Output ${x62Sel('x62ShapO', x62OutOpts(run), X62.shapOut, 'X62.shapOut=+this.value')}</label><button type="button" class="btn-secondary x62-btn" onclick="x62RunShap(X62.run)">Compute the SHAP values</button></div><div id="x62ShapOut"></div>`;
+  if (run.shap) x62ShowShap(run);
+}
+function x62RunShap(run) {
+  const S = run.S, X = S.Xa, c = X62.shapOut, p = S.features.length;
+  const rnd = x62Rng(404);
+  const bg = Array.from({ length: p }, (_, j) => S.Xf.reduce((a, r) => a + r[j], 0) / S.Xf.length);
+  const rows = fisherYatesShuffle(Array.from({ length: X.length }, (_, i) => i), rnd).slice(0, Math.min(40, X.length));
+  const M = 25, phi = [];
+  let r = 0;
+  showProgress('SHAP values', 'Sampling permutations…', 5);
+  const step = () => {
+    const t0 = performance.now();
+    while (r < rows.length && performance.now() - t0 < 80) {
+      const x = X[rows[r]], contrib = new Float64Array(p);
+      for (let mm = 0; mm < M; mm++) {
+        const perm = fisherYatesShuffle(Array.from({ length: p }, (_, i) => i), rnd);
+        const pts = [bg.slice()];
+        perm.forEach(f => { const o = pts[pts.length - 1].slice(); o[f] = x[f]; pts.push(o); });
+        const pr = S.model.proba(pts).map(q => q[c]);
+        perm.forEach((f, q) => { contrib[f] += pr[q + 1] - pr[q]; });
+      }
+      phi.push({ v: Array.from(contrib, v => v / M), x });
+      r++;
+    }
+    if (r < rows.length) { showProgress('SHAP values', `Row ${r} of ${rows.length}`, 5 + Math.round(90 * r / rows.length)); setTimeout(step, 0); return; }
+    hideProgress();
+    const imp = S.features.map((f, j) => {
+      const a = phi.map(q => q.v[j]), xv = phi.map(q => q.x[j]);
+      const mean = a.reduce((s, v) => s + Math.abs(v), 0) / a.length;
+      const mx = xv.reduce((s, v) => s + v, 0) / xv.length, ma = a.reduce((s, v) => s + v, 0) / a.length;
+      let sxy = 0, sxx = 0, syy = 0; for (let i = 0; i < a.length; i++) { sxy += (xv[i] - mx) * (a[i] - ma); sxx += (xv[i] - mx) ** 2; syy += (a[i] - ma) ** 2; }
+      return { f, mean, dir: sxx > 0 && syy > 0 ? sxy / Math.sqrt(sxx * syy) : NaN };
+    }).sort((a, b) => b.mean - a.mean);
+    run.shap = { c, imp, n: rows.length, M };
+    x62ShowShap(run);
+  };
+  setTimeout(step, 30);
+}
+function x62ShowShap(run) {
+  const o = document.getElementById('x62ShapOut'), R = run.shap; if (!o || !R) return;
+  const dirTxt = d => !Number.isFinite(d) ? '' : d > 0.3 ? 'higher value → higher probability' : d < -0.3 ? 'higher value → lower probability' : 'mixed';
+  o.innerHTML = `<h4 class="x62-h4">${x62E(run.T[R.c])}</h4><div class="x62-chartbox"><canvas id="x62ShapChart"></canvas></div>
+    <table class="x62-tab"><thead><tr><th>Predictor</th><th>Mean |SHAP value|</th><th>Correlation of value and SHAP value</th><th>Direction</th></tr></thead><tbody>${R.imp.map(r => `<tr><td>${x62E(r.f)}</td><td>${r.mean.toFixed(4)}</td><td>${x62F(r.dir, 2)}</td><td>${dirTxt(r.dir)}</td></tr>`).join('')}</tbody></table>
+    <div class="x62-note">SHAP values in probability units of ${x62E(run.T[R.c])}; ${R.n} Test Set rows, ${R.M} permutations each.</div>`;
+  x62Chart('x62ShapChart', { type: 'bar', data: { labels: R.imp.map(r => r.f), datasets: [{ label: 'Mean |SHAP value|', data: R.imp.map(r => r.mean), backgroundColor: R.imp.map(r => r.dir < 0 ? '#E07B39' : '#1F77B4') }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: 'Mean |SHAP value| (blue: higher value raises the probability, orange: lowers it)' } } } } });
+}
+
+/* ---------- Forecasts: the latest rows (h ahead) and an uploaded file ---------- */
+function x62FcRows(run, rows, ok, P, actual) {
+  const T = run.T, meta = x62MetaCols(), cuts = T.map(x62Cut);
+  return ok.map((i, q) => {
+    const r = rows[i], o = {};
+    if (r.__ri !== undefined && rawData[r.__ri]) meta.forEach(c => { const v = rawData[r.__ri][c]; o[c] = v === null || v === undefined ? '' : v; });
+    else meta.forEach(c => { if (r[c] !== undefined) o[c] = r[c]; });
+    if (r.__row !== undefined) o.Row = r.__row;
+    let k = 0;
+    T.forEach((t, j) => { const d = P[q][j] >= cuts[j] ? 1 : 0; k += d; if (actual) o[`${t}: actual`] = actual[i][j] === null ? '' : actual[i][j]; o[`${t}: probability`] = +P[q][j].toFixed(6); o[`${t}: predicted`] = d; });
+    o['Predicted 1s'] = k;
+    return o;
+  });
+}
+function x62FcTable(R, max) {
+  if (!R.length) return '<div class="x62-note">No rows.</div>';
+  const cols = Object.keys(R[0]);
+  return `<div class="x62-scroll x62-predwrap"><table class="x62-tab x62-pred"><thead><tr>${cols.map(c => `<th>${x62E(c)}</th>`).join('')}</tr></thead><tbody>${R.slice(0, max || 500).map(o => `<tr>${cols.map(c => { const v = o[c]; return `<td>${typeof v === 'number' && !Number.isInteger(v) ? v.toFixed(4) : x62E(v)}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div>${R.length > (max || 500) ? `<div class="x62-note">The first ${max || 500} of ${R.length} rows; the Excel file has all of them.</div>` : ''}`;
+}
+function x62RenderFc(run) {
+  const b = document.getElementById('x62FcCardBody'); if (!b) return;
+  const S = run.S;
+  let live = '';
+  if (S.h > 0) {
+    if (S.live && S.live.ok.length) {
+      const R = x62FcRows(run, S.live.rows, S.live.ok, S.live.P, null);
+      run.liveRows = R;
+      live = `<h4 class="x62-h4">The latest rows: forecasts ${S.h} step${S.h > 1 ? 's' : ''} ahead</h4><div class="x62-explain">Rows whose targets lie beyond the data (with h = ${S.h} the targets of the next period are not known yet). The network trained on all the training rows gives each output's probability; the cutoffs give the yes/no answer.${S.live.ok.length < S.live.rows.length ? ` ${S.live.rows.length - S.live.ok.length} row(s) with a missing predictor are left out (Drop Incomplete Rows).` : ''}</div>
+        <div class="x62-viewbar no-print"><button type="button" class="btn-chart-dl x62-xl" onclick="x62ExportFc('live')">Export to Excel (.xlsx)</button></div>${x62FcTable(R)}`;
+    } else live = '<div class="x62-note">No row has all its targets beyond the data.</div>';
+  } else live = '<div class="x62-note">Forecast horizon h = 0: the targets are in the same row as the predictors, so there are no rows beyond the data to forecast. Upload a file of new rows below.</div>';
+  b.innerHTML = `${live}
+    <h4 class="x62-h4">New rows from a file</h4><div class="x62-explain">Upload a file (.xlsx, .xls, .csv) with the same predictor columns. The final network and its preprocessing (fitted on the training rows) give the probability and the yes/no answer of every output. If the file also has the target columns, each output is scored.</div>
+    <div class="x62-viewbar no-print"><input type="file" id="x62FcFile" accept=".xlsx, .xls, .csv" onchange="x62FcUpload(event)"></div><div id="x62FcOut"></div>`;
+  if (run.fc) x62ShowFc(run);
+}
+function x62FcUpload(e) {
+  const file = e.target.files && e.target.files[0]; if (!file || !X62.run) return;
+  const run = X62.run, S = run.S;
+  const reader = new FileReader();
+  reader.onload = evt => {
+    let res;
+    const savedTypes = typeof importColumnTypes !== 'undefined' ? importColumnTypes : null, savedOv = typeof importTypeOverrides !== 'undefined' ? importTypeOverrides : null;
+    try { importTypeOverrides = {}; res = importTabularFile(file.name, evt.target.result, { sortByDate: false }); }
+    catch (err) { showValidationBanner('Could not read this file: ' + (err && err.message ? err.message : err)); return; }
+    finally { try { importColumnTypes = savedTypes; importTypeOverrides = savedOv; } catch (er) {} }
+    const raw = res.data || [];
+    if (!raw.length) { showValidationBanner('The file has no rows.'); return; }
+    const has = run.T.filter(t => t in raw[0]);
+    const base = raw.map((r, i) => { const o = Object.assign({}, r); run.T.forEach(t => delete o[t]); return o; });
+    const enc = encodeCategoricalsAndTarget(base, '__x62none__');
+    const rawKeys = Object.keys(raw[0]);
+    const rows = enc.map((r, i) => {
+      const o = { __row: i + 1 };
+      S.features.forEach(f => { if (f in r) o[f] = r[f]; else if (rawKeys.some(c => f.indexOf(c + '_') === 0)) o[f] = 0; else o[f] = null; });
+      x62MetaCols().forEach(c => { if (c in raw[i]) o[c] = raw[i][c]; });
+      return o;
+    });
+    const missingCols = S.features.filter(f => !(f in enc[0]) && !rawKeys.some(c => f.indexOf(c + '_') === 0));
+    const A = x62Apply(rows, S);
+    // a target column whose labels do not include the training "1" cannot be scored
+    const badLab = has.filter(t => { const lab = new Set(raw.map(r => r[t]).filter(v => !x62Miss(v)).map(String)); return lab.size && !lab.has(String(run.pos[t])); });
+    const actual = has.length === run.T.length ? raw.map(r => run.T.map(t => badLab.includes(t) ? null : x62Code(t, r[t], run.pos[t]))) : null;
+    run.fc = { name: file.name, rows, A, actual, missingCols, has, badLab };
+    x62ShowFc(run);
+  };
+  reader.readAsArrayBuffer(file);
+  e.target.value = '';
+}
+function x62ShowFc(run) {
+  const o = document.getElementById('x62FcOut'), F = run.fc; if (!o || !F) return;
+  const R = x62FcRows(run, F.rows, F.A.ok, F.A.P, F.actual);
+  F.R = R;
+  let score = '';
+  if (F.actual) {
+    const cuts = run.T.map(x62Cut);
+    const ms = run.T.map((t, j) => x62M(F.A.ok.map(i => F.actual[i][j]), F.A.P.map(p => p[j]), cuts[j]));
+    score = `<h4 class="x62-h4">Scores of the new rows (actual values in the file)</h4>${F.badLab && F.badLab.length ? `<div class="x62-warnbox">${F.badLab.map(x62E).join(', ')}: the labels in the file do not include the training 1 (${F.badLab.map(t => x62E(run.pos[t])).join(', ')}), so ${F.badLab.length > 1 ? 'these outputs are' : 'this output is'} not scored.</div>` : ''}${run.S.h ? `<div class="x62-note">With h = ${run.S.h}, each target value in the file is read as the outcome ${run.S.h} step${run.S.h > 1 ? 's' : ''} after its row: shift the target columns in the file first if they belong to the same period as the predictors.</div>` : ''}<table class="x62-tab"><thead><tr><th>Output</th><th>Rows</th><th>AUC</th><th>Log loss</th><th>Brier</th><th>Accuracy</th><th>Sensitivity</th><th>Specificity</th></tr></thead><tbody>${run.T.map((t, j) => { const m = ms[j]; return `<tr><td>${x62E(t)}</td><td>${m ? m.n : 0}</td><td>${x62F(m && m.auc, 3)}</td><td>${x62F(m && m.logloss, 4)}</td><td>${x62F(m && m.brier, 4)}</td><td>${x62F(m && m.acc, 'pct')}</td><td>${x62F(m && m.sens, 3)}</td><td>${x62F(m && m.spec, 3)}</td></tr>`; }).join('')}</tbody></table>`;
+  } else if (F.has.length) score = `<div class="x62-note">The file has only some of the target columns (${F.has.map(x62E).join(', ')}): no scores.</div>`;
+  o.innerHTML = `<div class="x62-note"><b>${x62E(F.name)}</b>: ${F.rows.length} rows, ${F.A.ok.length} forecast${F.A.ok.length < F.rows.length ? `; ${F.rows.length - F.A.ok.length} left out with a missing predictor` : ''}.${F.missingCols.length ? ` <span class="x62-warn">Not in the file: ${F.missingCols.map(x62E).join(', ')}${run.S.imp ? ' (filled with the training mean or median)' : ''}.</span>` : ''}</div>
+    ${score}<div class="x62-viewbar no-print"><button type="button" class="btn-chart-dl x62-xl" onclick="x62ExportFc('file')">Export to Excel (.xlsx)</button></div>${x62FcTable(R)}`;
+}
+function x62ExportFc(kind) {
+  const run = X62.run; if (!run) return;
+  const R = kind === 'live' ? run.liveRows : (run.fc && run.fc.R);
+  if (!R || !R.length) return;
+  try { const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R), kind === 'live' ? 'Latest rows' : 'New rows'); XLSX.writeFile(wb, kind === 'live' ? '4CastLab_Several_Outputs_Latest_Rows.xlsx' : '4CastLab_Several_Outputs_New_Data_Forecasts.xlsx'); }
+  catch (e) { showValidationBanner('Export failed: ' + (e && e.message ? e.message : e)); }
+}
+
+/* ---------- Reports ---------- */
+function x62Clone(id) { const b = document.getElementById(id + 'Body'); if (!b || !b.innerHTML.trim()) return ''; try { return v462ReportClone(b); } catch (e) { const c = b.cloneNode(true); c.querySelectorAll('.no-print, button, select, input').forEach(n => n.remove()); return c.innerHTML; } }
+function x62ReportHeader(title) {
+  const run = X62.run;
+  let h = ''; try { h = reportHeader(title); } catch (e) { h = `<h1>${title}</h1>`; }
+  return h.replace('binary classification', `classification with several outputs (${run.T.length} target columns)`).replace(/Target: <b>[\s\S]*?<\/b>/, `Targets: <b>${run.T.map(x62E).join(', ')}</b>`);
+}
+function x62MethodsText(run) {
+  const S = run.S, T = run.T, m = T.length, sel = X62_SEL[S.selKey];
+  const P = [];
+  P.push(`The data had ${S.n0} rows. ${m} target columns with two values each (${T.map(t => `${x62E(t)}, 1 = ${x62E(run.pos[t])}`).join('; ')}) were predicted jointly${S.h ? `, each shifted ${S.h} step${S.h > 1 ? 's' : ''} ahead (direct ${S.h}-step forecasting)` : ''}. A row was kept when at least one target was present${S.dropAll ? ` (${S.dropAll} rows had none and were left out)` : ''}; a missing target value contributed no error for that output (masked loss).${S.dropInc ? ` ${S.dropInc} rows with a missing predictor were dropped.` : ''} ${S.features.length} predictors were used: ${S.features.map(x62E).join(', ')}.`);
+  P.push(`The rows were split ${S.splitStrategy === 'time_series' ? `in time order into a training set (${S.trRows.length} rows) and a Test Set (${S.teRows.length} rows)${S.embargoRows ? `, with a purge of ${S.embargoRows} rows between them` : ''}` : `at random into a training set (${S.trRows.length} rows) and a Test Set (${S.teRows.length} rows)${S.strat ? ', stratified by the number of 1s of each row (0, 1, 2 or more)' : ''}`}. Missing predictor values (${x62E(S.imputeType)}), outliers (${x62E(S.outlierType)}) and scaling (${x62E(S.scalingType)}) were fitted on the fitting rows only: on the training rows of each cross-validation fold, and on the whole training set for the final model.`);
+  P.push(`The model was a feed-forward artificial neural network (ANN), a multi-layer perceptron (Rumelhart, Hinton and Williams 1986) with ${S.dims ? `${S.dims[0]} inputs, ${S.dims.slice(1, -1).join(' and ')} hidden units` : 'one hidden layer'} (${x62E(S.opt.act)} activation) and ${m} sigmoid output nodes, one per target column. The hidden layers were shared by all the outputs, as in multi-task learning (Caruana 1997); in the terms of multi-label learning (Zhang and Zhou 2014) the network predicts a vector of ${m} binary labels whose probabilities need not sum to 1. It was trained by stochastic gradient descent (one row per update, rows in their order) on the sum over the outputs of the binary cross-entropy${S.useW ? ', with balanced class weights computed for each output separately' : ''}; hyperparameters: ${x62E(x62ParamText(S.best.params))}; ${S.epochs} epochs in the final fit.`);
+  P.push(`${S.grid.length > 1 ? `${S.grid.length} hyperparameter settings were compared by ${S.kFolds}-fold cross-validation on the training set; the setting with the best ${sel[0]} averaged over the outputs was chosen and refitted on the whole training set.` : `The built-in setting was evaluated by ${S.kFolds}-fold cross-validation on the training set and refitted on the whole training set.`} Each output was evaluated on its validation rows where it was present.`);
+  P.push(`A row was predicted 1 in an output when its probability was at or above that output's cutoff (${T.map((t, j) => `${x62E(t)} ${x62Cut(t).toFixed(3)}`).join(', ')}; ${X62.rule === 'manual' ? 'set by hand' : X62.rule === 'half' ? '0.5 for every output' : `chosen for each output by the rule "${X62_RULES[X62.rule]}" on the out-of-fold predictions of the training set${X62.rule === 'youden' ? ' (Youden 1950)' : ''}`}). For every output the report gives AUC, accuracy, balanced accuracy, sensitivity, specificity, precision, F1, MCC, PR-AUC, log loss and the Brier score (Brier 1950), their averages over the outputs, and, for the set of answers, the share of rows with every output right (exact match) and the Hamming loss. Benchmarks: the training share of 1s and the majority class of each output.`);
+  if (S.compare) P.push('Each output was also fitted with a separate ANN (the chosen setting, one output node, the same loss) and a Logistic Regression, on the same folds and Test Set, to see whether one shared network does better than one model per output.');
+  if (run.boot) P.push(`95% intervals of the Test Set metrics come from ${run.boot.B} bootstrap resamples of whole Test Set rows with the model fixed (Efron and Tibshirani 1993)${run.boot.ts ? `, in moving blocks of ${run.boot.L} rows (Künsch 1989)` : ''}.`);
+  if (run.imp || run.shap) P.push(`Interpretation: ${run.imp ? 'permutation importance, the increase in Test Set log loss when a predictor is shuffled (Breiman 2001), for each output and on average; ' : ''}partial dependence and ICE curves (Friedman 2001; Goldstein et al. 2015)${run.shap ? `; SHAP values of ${x62E(T[run.shap.c])} (Lundberg and Lee 2017), estimated by sampling permutations (Štrumbelj and Kononenko 2014)` : ''}.`);
+  return P.map(p => `<p>${p}</p>`).join('');
+}
+const X62_REFS = `<h3>References</h3><p style="font-size:11.5px;">Breiman, L. (2001) Random forests. Machine Learning 45, 5-32. · Brier, G. W. (1950) Verification of forecasts expressed in terms of probability. Monthly Weather Review 78, 1-3. · Caruana, R. (1997) Multitask learning. Machine Learning 28, 41-75. · Efron, B., Tibshirani, R. J. (1993) An Introduction to the Bootstrap. Chapman & Hall. · Friedman, J. H. (2001) Greedy function approximation: a gradient boosting machine. Annals of Statistics 29, 1189-1232. · Goldstein, A., Kapelner, A., Bleich, J., Pitkin, E. (2015) Peeking inside the black box: visualizing statistical learning with plots of individual conditional expectation. Journal of Computational and Graphical Statistics 24, 44-65. · Künsch, H. R. (1989) The jackknife and the bootstrap for general stationary observations. Annals of Statistics 17, 1217-1241. · Lundberg, S. M., Lee, S.-I. (2017) A unified approach to interpreting model predictions. Advances in Neural Information Processing Systems 30. · Rumelhart, D. E., Hinton, G. E., Williams, R. J. (1986) Learning representations by back-propagating errors. Nature 323, 533-536. · Štrumbelj, E., Kononenko, I. (2014) Explaining prediction models and individual predictions with feature contributions. Knowledge and Information Systems 41, 647-665. · Youden, W. J. (1950) Index for rating diagnostic tests. Cancer 3, 32-35. · Zhang, M.-L., Zhou, Z.-H. (2014) A review on multi-label learning algorithms. IEEE Transactions on Knowledge and Data Engineering 26, 1819-1837.</p>`;
+function x62Report(which) {
+  const run = X62.run; if (!run) return '';
+  const num = { n: 1 }; let s = 1;
+  const fig = (id, cap) => { try { return v41Fig(id, cap, num); } catch (e) { return ''; } };
+  let h = x62ReportHeader(which === 'methods' ? 'Methods Report' : which === 'results' ? 'Results Report' : 'Full Analysis Report');
+  if (which !== 'results') {
+    h += `<h2>${s++}. Settings of this run</h2>` + x62Clone('x62SetCard');
+    h += `<h2>${s++}. Methods</h2>` + x62MethodsText(run);
+    h += `<h3>The network</h3>` + x62NetSvg(run) + fig('x62CurveChart', 'Learning curve of the final fit: mean training log loss per row of each output, by epoch.');
+  }
+  if (which !== 'methods') {
+    h += `<h2>${s++}. Predictive performance</h2>` + x62Clone('x62MetricsCard');
+    if (run.S.compare) h += `<h3>Shared network against separate models</h3>` + x62Clone('x62CmpCard');
+    h += `<h2>${s++}. Diagnostics</h2><h3>Confusion matrices (Test Set)</h3>` + x62Clone('x62CmCard');
+    h += fig('x62RocChart', 'ROC curves of each output (Test Set).') + fig('x62CalChart', `Calibration of ${x62E(run.T[Math.min(X62.calOut, run.T.length - 1)])} (Test Set, 10 bins).`) + x62Clone('x62CalCard').replace(/<canvas[\s\S]*?<\/canvas>/g, '');
+    if (run.boot) h += `<h2>${s++}. Bootstrap confidence intervals</h2>` + (document.getElementById('x62BootOut') ? v462ReportClone(document.getElementById('x62BootOut')) : '');
+    h += `<h2>${s++}. Interpretation</h2>`;
+    if (run.imp) h += `<h3>Permutation importance</h3>` + v462ReportClone(document.getElementById('x62ImpOut'));
+    h += fig('x62PdpChart', `Partial dependence${X62.pdpOut === 'all' ? ' of every output' : ` and ICE of ${x62E(run.T[X62.pdpOut])}`} on ${x62E(run.S.features[X62.pdpFeat] || '')}.`);
+    if (run.shap) h += `<h3>SHAP values of ${x62E(run.T[run.shap.c])}</h3>` + fig('x62ShapChart', `Mean absolute SHAP values of ${x62E(run.T[run.shap.c])}.`) + v462ReportClone(document.getElementById('x62ShapOut')).replace(/<canvas[\s\S]*?<\/canvas>/g, '');
+    if (run.liveRows && run.liveRows.length) h += `<h2>${s++}. Forecasts of the latest rows (${run.S.h} step${run.S.h > 1 ? 's' : ''} ahead)</h2>` + x62FcTable(run.liveRows, 100);
+  }
+  h += X62_REFS;
+  return h;
+}
+
+/* ---------- the Python script ---------- */
+function x62PythonScript() {
+  const run = X62.run; if (!run) return { error: 'Train a model first.' };
+  const S = run.S, T = run.T, F = S.features, wts = S.model.weights();
+  const cell = v => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v))) ? '' : String(Number(v));
+  const lines = [['_split'].concat(T, F).map(h => JSON.stringify(h)).join(',')];
+  S.trRows.forEach(r => lines.push(['train'].concat(T.map(t => cell(r[t])), F.map(f => cell(r[f]))).join(',')));
+  S.teRows.forEach(r => lines.push(['test'].concat(T.map(t => cell(r[t])), F.map(f => cell(r[f]))).join(',')));
+  const z = F.map(() => 0), o1 = F.map(() => 1), s0 = S.sc.scaleRow(z), s1 = S.sc.scaleRow(o1);
+  const A = s0, Bs = s1.map((v, j) => v - s0[j]);
+  const imp = S.imp ? F.map(f => Number.isFinite(S.imp[f]) ? S.imp[f] : 0) : null;
+  const bnd = S.bnd ? F.map(f => { const b = S.bnd[f]; return b ? (b.type === 'iqr' ? [b.lower, b.upper] : [b.mean, b.std]) : null; }) : null;
+  const num = v => Number.isFinite(v) ? (Math.abs(v) < 1e-300 ? '0.0' : v.toPrecision(17)) : 'float("nan")';
+  const arr = a => '[' + a.map(v => Array.isArray(v) ? arr(v) : (v === null ? 'None' : num(v))).join(', ') + ']';
+  const hidden = Array.isArray(S.best.params.hidden) ? S.best.params.hidden : S.opt.hidden;
+  const act = { relu: 'relu', tanh: 'tanh', sigmoid: 'logistic' }[S.opt.act] || 'relu';
+  const appM = T.map((t, j) => { const m = run.C.out[j].te; return m ? [m.auc, m.logloss, m.brier] : [NaN, NaN, NaN]; });
+  const base = (() => { try { return v41Slug((typeof currentDatasetFileName !== 'undefined' && currentDatasetFileName) || 'data').replace(/\.(csv|xlsx?|4cl)$/i, ''); } catch (e) { return 'data'; } })();
+  const py = `# -*- coding: utf-8 -*-
+"""
+4Cast Lab v${APP_VERSION}: reproducible script for one run with several outputs
+Generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')}
+Model: ANN with ${T.length} sigmoid outputs (${T.join(', ')}), hidden ${hidden.join(' x ')} (${S.opt.act}),
+hyperparameters ${x62ParamText(S.best.params)}; ${S.epochs} epochs in the final fit.
+The rows below are the app's modelling rows (predictors before imputation; targets coded 0/1, empty = missing).
+Part 1 applies the app's preprocessing and the weights the app learned: it reproduces the app's Test Set
+probabilities. Part 2 refits scikit-learn's MLPClassifier with the same layout for comparison.
+"""
+import io, numpy as np, pandas as pd
+from sklearn.neural_network import MLPClassifier
+from sklearn.metrics import roc_auc_score, log_loss, brier_score_loss
+
+CSV = """${lines.join('\n')}"""
+TARGETS = ${JSON.stringify(T)}
+FEATURES = ${JSON.stringify(F)}
+IMPUTE = ${imp ? arr(imp) : 'None'}            # ${S.imputeType}: the training value that fills a missing predictor
+OUTLIER_TYPE = ${JSON.stringify(S.outlierType)}
+OUTLIER = ${bnd ? arr(bnd.map(b => b || [NaN, NaN])) : 'None'}   # iqr: [lower, upper]; zscore: [mean, sd] of the training rows
+SCALE_A = ${arr(A)}
+SCALE_B = ${arr(Bs)}            # scaled value = SCALE_A + SCALE_B * value (${S.scalingType}, fitted on the training rows)
+WEIGHTS = ${JSON.stringify(wts.W.map(m => m.map(r => r.map(v => +v.toPrecision(17)))))}
+BIASES = ${JSON.stringify(wts.B.map(b => b.map(v => +v.toPrecision(17))))}
+ACT = ${JSON.stringify(S.opt.act)}
+APP_TEST = ${arr(appM)}   # the app's Test Set AUC, log loss, Brier score of each output
+
+df = pd.read_csv(io.StringIO(CSV))
+tr, te = df[df["_split"] == "train"], df[df["_split"] == "test"]
+
+def prepare(d, fitting):
+    X = d[FEATURES].to_numpy(float)
+    if IMPUTE is not None:
+        X = np.where(np.isnan(X), np.array(IMPUTE), X)
+    keep = np.ones(len(X), bool)
+    if OUTLIER is not None:
+        B = np.array(OUTLIER, float)
+        if OUTLIER_TYPE == "iqr":
+            X = np.clip(X, B[:, 0], B[:, 1])
+        elif OUTLIER_TYPE == "zscore":
+            z = (X - B[:, 0]) / B[:, 1]
+            if fitting:
+                keep = (np.abs(z) <= 3.0).all(axis=1)      # training rows beyond 3 SD are removed from the fit
+            else:
+                X = np.clip(X, B[:, 0] - 3 * B[:, 1], B[:, 0] + 3 * B[:, 1])   # held-out rows are clipped
+    return np.array(SCALE_A) + np.array(SCALE_B) * X, keep
+
+class AppMultiOutputANN:
+    """The network 4Cast Lab trained: hidden layers with ACT, one sigmoid output per target column."""
+    def __init__(self, W, B, act):
+        self.W, self.B, self.act = [np.array(w) for w in W], [np.array(b) for b in B], act
+    def predict_proba(self, X):
+        a = X
+        for l, (w, b) in enumerate(zip(self.W, self.B)):
+            z = a @ w.T + b
+            if l == len(self.W) - 1:
+                return 1 / (1 + np.exp(-np.clip(z, -50, 50)))
+            a = np.maximum(0, z) if self.act == "relu" else np.tanh(z) if self.act == "tanh" else 1 / (1 + np.exp(-np.clip(z, -50, 50)))
+
+Xtr, keep = prepare(tr, True)
+Xte, _ = prepare(te, False)
+Ytr, Yte = tr[TARGETS].to_numpy(float)[keep], te[TARGETS].to_numpy(float)
+
+def scores(y, p):
+    k = ~np.isnan(y)
+    y, p = y[k], np.clip(p[k], 1e-15, 1 - 1e-15)
+    auc = roc_auc_score(y, p) if len(np.unique(y)) == 2 else float("nan")
+    return auc, log_loss(y, p, labels=[0, 1]), brier_score_loss(y, p)
+
+print("Part 1: the app's network on the app's preprocessing (should equal the app's numbers)")
+P = AppMultiOutputANN(WEIGHTS, BIASES, ACT).predict_proba(Xte)
+for j, t in enumerate(TARGETS):
+    a, l, b = scores(Yte[:, j], P[:, j])
+    print(f"  {t:24s} AUC {a:.6f} (app {APP_TEST[j][0]:.6f})  log loss {l:.6f} (app {APP_TEST[j][1]:.6f})  Brier {b:.6f} (app {APP_TEST[j][2]:.6f})")
+
+# Part 2: scikit-learn refit. MLPClassifier has no masked loss, so it uses the training rows with every
+# target present; it starts from its own random weights and does not stop early, so small differences are expected.
+full = ~np.isnan(Ytr).any(axis=1)
+mlp = MLPClassifier(hidden_layer_sizes=${JSON.stringify(hidden).replace('[', '(').replace(']', hidden.length === 1 ? ',)' : ')')}, activation=${JSON.stringify(act)}, solver="sgd",
+                    learning_rate_init=${num(S.best.params.lr || 0.01)}, batch_size=1, max_iter=${S.epochs}, momentum=0, nesterovs_momentum=False,
+                    alpha=${num(S.best.params.l2 || 0)}, shuffle=False, tol=0, n_iter_no_change=10**6, random_state=42)
+mlp.fit(Xtr[full], Ytr[full].astype(int))
+Q = mlp.predict_proba(Xte)
+print(f"Part 2: scikit-learn MLPClassifier on {full.sum()} of {len(Ytr)} training rows (every target present)")
+for j, t in enumerate(TARGETS):
+    a, l, b = scores(Yte[:, j], Q[:, j])
+    print(f"  {t:24s} AUC {a:.4f}  log loss {l:.4f}  Brier {b:.4f}")
+`;
+  return { py, base };
+}
+
+/* ---------- sessions ---------- */
+function x62State() {
+  const run = X62.run, S = run ? run.S : null;
+  return {
+    on: x62On(), targets: X62.targets.slice(), cut: Object.assign({}, X62.cut), rule: X62.rule, cost: JSON.parse(JSON.stringify(X62.cost)),
+    compare: !!(document.getElementById('x62Compare') || {}).checked, ran: !!run,
+    tune: S ? { sig: S.sig, bestIdx: S.bestIdx, gridCv: S.gridCv.map(c => c ? { mean: c.mean, se: c.se, nFolds: c.nFolds, score: c.score } : null), seedBefore: S.seedBefore, seed: { det: !!S.det, runSeed: S.det ? null : X47.lastRunSeed } } : null
+  };
+}
+function x62RestoreState(z) {
+  if (!z) return;
+  const ts = document.getElementById('taskTypeSelect');
+  if (z.on && ts) ts.value = 'multi';
+  X62.targets = Array.isArray(z.targets) ? z.targets.slice() : [];
+  X62.cut = z.cut || {}; X62.rule = z.rule || 'manual'; X62.cost = z.cost || {};
+  const r = document.getElementById('x62Rule'); if (r) r.value = X62.rule;
+  const c = document.getElementById('x62Compare'); if (c) c.checked = z.compare !== false;
+  X62.candRef = null;
+  x62Sync();
+}
+
+/* ---------- hooks into the app ---------- */
+(function () {
+  try {
+    x62InstallUI();
+    const oT = onTargetChange;
+    onTargetChange = function () { const r = oT.apply(this, arguments); if (!X62.guard) { try { x62Sync(); } catch (e) { console.error('v62 sync', e); } } return r; };
+    const oF = updateFeatureChecklist;
+    updateFeatureChecklist = function () { const r = oF.apply(this, arguments); try { x62MarkChecklist(); } catch (e) {} return r; };
+    const oD = handleDatasetChange;
+    handleDatasetChange = function () { const r = oD.apply(this, arguments); setTimeout(() => { try { X62.targets = []; X62.cut = {}; if (X62.run) x62Clear(); x62Sync(); } catch (e) {} }, 250); return r; };
+    const oC = clearPreviousOutputs;
+    clearPreviousOutputs = function () { const r = oC.apply(this, arguments); try { if (!X62.busy && X62.run) x62Clear(); } catch (e) {} return r; };
+    // Drop Incomplete Rows: a missing value in a target column does not drop the row (that output is skipped for it)
+    const oDC = dropDecisionColumns;
+    dropDecisionColumns = function () { const r = oDC.apply(this, arguments); try { if (x62On()) { const T = X62.targets.concat([(document.getElementById('targetSelect') || {}).value]); return r.filter(c => !T.includes(c)); } } catch (e) {} return r; };
+    const oP = runPipeline, oA = runTrainAll;
+    runPipeline = function () { if (x62On() && !(typeof X50 !== 'undefined' && X50.running)) return x62Run(); return oP.apply(this, arguments); };
+    runTrainAll = function () { if (x62On() && !(typeof X50 !== 'undefined' && X50.running)) return x62Run(); return oA.apply(this, arguments); };
+    const oS = x47Sum;
+    x47Sum = function (g) {
+      try {
+        if (x62On()) {
+          const T = X62.targets, h = parseInt(v45Val('horizonH', '0'), 10) || 0;
+          if (g === 2) return T.length ? [`${T.length} target columns`, `Classification, ${T.length} outputs · h ${h}`] : ['No target columns yet', 'Tick 2 to 10'];
+          if (g === 6) return ['Cutoff of each output', X62_RULES[X62.rule]];
+        }
+      } catch (e) {}
+      return oS.apply(this, arguments);
+    };
+    const oH = x47Chip;
+    x47Chip = function () {
+      const r = oH.apply(this, arguments);
+      try {
+        if (x62On()) {
+          const b = document.getElementById('taskModeBadge');
+          if (b) { const m = X62.targets.length; b.innerHTML = `${x47H('classify')}<span>Classification (${m ? m + ' outputs' : 'several outputs'})</span>`; b.className = 'mode-badge mode-class x47-chip'; b.title = 'Several 0/1 target columns: one ANN with one output node and one probability per target column.'; }
+        }
+      } catch (e) {}
+      return r;
+    };
+    // stage 2: reports, Python script, sessions, AI interpretation
+    const oBR = buildReport;
+    buildReport = function (which) {
+      if (!X62.run) return oBR.apply(this, arguments);
+      try { if (typeof Q54 !== 'undefined') { Q54.lastWhich = which || 'full'; Q54.lastMode = 'forecast'; } } catch (e) {}
+      const viewer = document.getElementById('reportViewer');
+      if (viewer) viewer.innerHTML = '<div class="empty-hint" style="border:none;">Compiling…</div>';
+      setTimeout(() => {
+        const make = () => { currentReportHTML = x62Report(which); currentReportTitle = which === 'methods' ? '4Cast Lab: Methods Report' : which === 'results' ? '4Cast Lab: Results Report' : '4Cast Lab: Full Analysis Report'; };
+        try { if (typeof withAllPanelsRendered === 'function' && typeof withLightCharts === 'function') withAllPanelsRendered(() => withLightCharts(make)); else make(); }
+        catch (e) { console.error('v62 report', e); try { make(); } catch (er) { currentReportHTML = '<p>The report could not be built: ' + x62E(er.message) + '</p>'; } }
+        if (viewer) viewer.innerHTML = currentReportHTML;
+        const ra = document.getElementById('reportActions'); if (ra) ra.style.display = 'flex';
+        try { updateTabCounts(); } catch (e) {}
+      }, 30);
+    };
+    const oPy = v45ExportPython;
+    v45ExportPython = function () {
+      if (!X62.run) return oPy.apply(this, arguments);
+      const r = x62PythonScript();
+      if (r.error) { showValidationBanner(r.error); return; }
+      try { v41DownloadBlob(new Blob([r.py], { type: 'text/x-python;charset=utf-8' }), `4CastLab_${r.base}_several_outputs_reproduce_${v41FileStamp()}.py`); } catch (e) { showValidationBanner('Download failed: ' + e.message); return; }
+      try { v41Toast('Python script downloaded (the modelling rows and the network weights are inside it).'); } catch (e) {}
+    };
+    if (typeof generateAcademicReport === 'function') {
+      const oAI = generateAcademicReport;
+      generateAcademicReport = function () {
+        if (!X62.run) return oAI.apply(this, arguments);
+        showValidationBanner('The AI interpretation is not available yet for a run with several outputs. Generate the Full report and paste its text into the AI of your choice.');
+      };
+    }
+    const oSS = v41SessionState;
+    v41SessionState = function () { const st = oSS.apply(this, arguments); try { st.x62 = x62State(); } catch (e) { console.error('v62 session', e); } return st; };
+    const oRS = v41RestoreSession;
+    v41RestoreSession = function (st) { const r = oRS.apply(this, arguments); try { if (st && st.x62) { const z = st.x62; setTimeout(() => { try { x62RestoreState(z); } catch (e) {} }, 200); } } catch (e) {} return r; };
+    if (typeof v451RerunAfterLoad === 'function') {
+      const oRe = v451RerunAfterLoad;
+      v451RerunAfterLoad = function (session) {
+        const z = session && session.v41 && session.v41.x62;
+        if (!(z && z.on && z.ran)) return oRe.apply(this, arguments);
+        setTimeout(() => {
+          try { x62RestoreState(z); } catch (e) {}
+          setTimeout(() => { try { X62.replay = z.tune || null; if (x62On() && X62.targets.length >= 2) x62Run(); } catch (e) { console.error('v62 rerun', e); } }, 700);
+        }, 250);
+      };
+    }
+    // the data can change without the dataset drop-down (uploads, sessions): rebuild the ticks when the mode is on
+    setInterval(() => { try { if (x62On() && X62.candRef !== rawData && rawData && rawData.length) { x62Sync(); } } catch (e) {} }, 1500);
+    setTimeout(() => { try { x62Sync(); } catch (e) {} }, 300);
+  } catch (e) { console.error('v62 install', e); }
+})();
+
+/* ---------- What's new ---------- */
+(function () {
+  try {
+    const items = [
+      ['<b>Several outputs in one ANN.</b> New task type in 2 Target: <b>Classification, several outputs (0/1 each)</b>. Tick 2 to 10 target columns with two values each (for example red flags, one per regulatory ratio); one ANN predicts all of them, with one output node and one probability per column. A row can be 1 in several outputs, and a missing target value is allowed (that output is skipped for that row).', null, 1],
+      ['Each output has its <b>own cutoff</b> (or a threshold rule applied to each output), its own metrics and confusion matrix, with averages over the outputs, exact match, Hamming loss and "at least one 1". <b>Compare with separate models</b> trains a separate ANN and a Logistic Regression per output on the same folds.', null, 1],
+      ['With several outputs, every tab works: ROC and calibration of each output, bootstrap intervals, permutation importance for each output, partial dependence and ICE, SHAP for a chosen output, forecasts of the latest rows and of an uploaded file, the reports, a Python script that reproduces the network, and sessions. A card in the Model tab draws the network and its learning curve.', null, 1],
+      ['<b>One name for the neural network: ANN</b> (Artificial Neural Network (ANN) where it is written out), in every list, table, report and help text.', null, 1]
+    ];
+    const e = Q51_NEWS.find(x => x[0] === '6.2');
+    if (e) e[2].push(...items); else Q51_NEWS.unshift(['6.2', 'November 2026', items]);
+  } catch (e) { console.error('v62 news', e); }
 })();
 
 </script>
